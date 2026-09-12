@@ -1,0 +1,14 @@
+fileFormatVersion: 2
+guid: ff3ab0eee84230a4e9ebc05120c3469b
+MonoImporter:
+  externalObjects: {}
+  serializedVersion: 2
+  defaultReferences:
+  - _udonSharpBackingUdonBehaviour: {instanceID: 0}
+  - solveMaterial: {fileID: 2100000, guid: 750c574b2942faa4ea95cf5a77f15595, type: 2}
+  - solverbuffer: {instanceID: 0}
+  executionOrder: 0
+  icon: {instanceID: 0}
+  userData: 
+  assetBundleName: 
+  assetBundleVariant: 
