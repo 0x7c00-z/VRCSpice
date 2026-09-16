@@ -47,7 +47,7 @@ while(true){
 #define STATE_PUSH_TO_OUTPUT 9
 
 #define PRECISION 0.000001
-
+#define MAX_NORM_ERR 1.0
 #define STEP_ORDER round(_MainTex[OFFSET_STEP_ORDER].r)
 
 float get_data(uint index, uint row)
@@ -322,15 +322,43 @@ float generate_predictor_vector(uint2 pixel)
     return data;
 }
 
+
+float calc_normalized_error()
+{
+    float normalized_error = 0;
+    [loop]
+    for (uint i = 0; i < _DATA_N; i++)
+    {
+        normalized_error = max(normalized_error,
+                            (abs(_MainTex[OFFSET_NR_VECTOR + uint2(i, 0)].r) - _MainTex[OFFSET_PREDICTOR_VECTOR + uint2(i, 0)].r)
+                            );
+    }
+    normalized_error = normalized_error * _MainTex[OFFSET_TIME_STEP].r / (_MainTex[OFFSET_TIME_STEP].r + get_data_i_data_im1_timestep(1) + ((STEP_ORDER == 1) ? 0 : get_data_i_data_im1_timestep(2)));
+    return normalized_error;
+}
+
 float determine_time_step_and_order(uint2 pixel)
 {
     float data = _MainTex[pixel].r; //get current data to be processed
     if (!any(pixel - OFFSET_STEP_ORDER))
     {
-        //カウンタもstateも普通に動いたのにこれは2^23をたさないと動かない？？？？←これも動いてない??
+        //カウンタもstateも普通に動いたのにこれは2^23をたさないと動かない？？？？←これも動いてない??←普通にfloatで一旦やりましょう
         uint order = min(2, asuint(_MainTex[OFFSET_STEPS_N].r));
         //order = 0; //DEBUG
         return order;
+
+    }
+    else if (!any(pixel - OFFSET_TIME_STEP))
+    {
+        /*float err = calc_normalized_error();
+        if (isnan(err) || err == 0)
+        {
+            data = data * 1.5;
+        }
+        else
+        {
+            data = data * max(1.1, pow(err, -1.0 / (STEP_ORDER + 1.0)));
+        }*/
 
     }
     return data;
@@ -373,19 +401,6 @@ float process(uint2 uv)
     }
 }
 
-float calc_normalized_error()
-{
-    float normalized_error = 0;
-    [loop]
-    for (uint i = 0; i < _DATA_N; i++)
-    {
-        normalized_error = max(normalized_error,
-                            (abs(_MainTex[OFFSET_NR_VECTOR + uint2(i, 0)].r) - _MainTex[OFFSET_PREDICTOR_VECTOR + uint2(i, 0)].r)
-                            );
-    }
-    //normalized_error = normalized_error * _MainTex[OFFSET_TIME_STEP].r / (_MainTex[OFFSET_TIME_STEP].r + get_data_i_data_im1_timestep(1) + (STEP_ORDER == 1) ? 0 : get_data_i_data_im1_timestep(2));
-    return normalized_error;
-}
 
 float flowControl(uint2 pixel)
 {
@@ -427,8 +442,14 @@ float flowControl(uint2 pixel)
                 else
                 {
                     //TODO:Evaluate the error and determine use this answer or not
-                    
-                    data = STATE_UPDATE_NR_VECTOR + 1;
+                    if (calc_normalized_error() > MAX_NORM_ERR)
+                    {
+                        data = STATE_DETERMINE_TIME_STEP_AND_ORDER;
+                    }
+                    else
+                    {
+                        data = STATE_UPDATE_NR_VECTOR + 1;
+                    }
                 }
             }
             else

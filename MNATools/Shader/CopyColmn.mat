@@ -66,7 +66,7 @@ Material:
     m_Ints:
     - _DstMatSize: 6
     - _DstTexHeight: 128
-    - _SrcMatSize: 6
+    - _SrcMatSize: 0
     m_Floats:
     - _BumpScale: 1
     - _Cutoff: 0.5

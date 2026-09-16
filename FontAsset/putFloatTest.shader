@@ -57,7 +57,11 @@ Shader "Unlit/putFloatTest"
 
                 putFloatChar(center + cursur, LINE, 0, asuint(_MainTex[OFFSET_SOLVER_STATE].r), 20, stream);
                 cursur.y -= LINE;
-                putFloatChar(center + cursur, LINE, 0, data, 20, stream);
+                putFloatChar(center + cursur, LINE, 0, data, 8, stream);
+                cursur.y -= LINE;
+
+                data = _MainTex[OFFSET_TIME_STEP];
+                putFloatChar(center + cursur, LINE, 0, data, 8, stream);
             }
             ENDCG
         }

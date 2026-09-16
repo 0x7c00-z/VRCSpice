@@ -91,7 +91,7 @@ public class MNASolve : UdonSharpBehaviour
             VRCGraphics.Blit(buffer0, tmpbuffer, processor);
             VRCGraphics.Blit(tmpbuffer, buffer1, flowControl);
 
-            for (int i = 0; i < stepperframe; i++)
+            for (int i = 0; i < stepperframe -1; i++)
             {
                 // Processing logic for buffer1
                 VRCGraphics.Blit(buffer1, tmpbuffer, processor);
@@ -106,7 +106,7 @@ public class MNASolve : UdonSharpBehaviour
             VRCGraphics.Blit(buffer1, tmpbuffer, processor);
             VRCGraphics.Blit(tmpbuffer, buffer0, flowControl);
 
-            for (int i = 0; i < stepperframe; i++)
+            for (int i = 0; i < stepperframe -1; i++)
             {
                 // Processing logic for buffer0
                 VRCGraphics.Blit(buffer0, tmpbuffer, processor);
@@ -130,9 +130,9 @@ public class MNASolve : UdonSharpBehaviour
         int height = Mathf.NextPowerOfTwo(5 + newmatrixsize + buflen);
         int mattexsize = Mathf.NextPowerOfTwo(newmatrixsize);
 
-        buffer0 = new RenderTexture(width, height, 0, RenderTextureFormat.RFloat);
-        buffer1 = new RenderTexture(width, height, 0, RenderTextureFormat.RFloat);
-        tmpbuffer = new RenderTexture(width, height, 0, RenderTextureFormat.RFloat);
+        buffer0 = new RenderTexture(width, height, 0, RenderTextureFormat.RInt);
+        buffer1 = new RenderTexture(width, height, 0, RenderTextureFormat.RInt);
+        tmpbuffer = new RenderTexture(width, height, 0, RenderTextureFormat.RInt);
 
         buffer0.Create();
         buffer1.Create();
