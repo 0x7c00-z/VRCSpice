@@ -47,7 +47,7 @@ while(true){
 #define STATE_PUSH_TO_OUTPUT 9
 
 #define PRECISION 0.000001
-#define MAX_NORM_ERR 1.0
+#define MAX_NORM_ERR 0.1
 
 float get_data(uint index, uint row)
 {
@@ -90,7 +90,7 @@ uint generate_yacobi_matrix_and_vector(uint2 pixel)
     {
         pixel -= OFFSET_YACOBI_MATRIX;
         result = SolverStoreFloat(dfidxj(pixel.x, pixel.y)
-            + dfidxdotj(pixel.x, pixel.y) / SolverLoadFloat(OFFSET_TIME_STEP));
+            + dfidxdotj(pixel.x, pixel.y) * SolverLoadFloat(OFFSET_COF_COR_NP1));
     }
     if (pixel.y == OFFSET_INVERSE_VECTOR.y)
     {
@@ -315,7 +315,7 @@ float calc_normalized_error()
     for (uint i = 0; i < _DATA_N; i++)
     {
         normalized_error = max(normalized_error,
-                            (abs(SolverLoadFloat(OFFSET_NR_VECTOR + uint2(i, 0))) - SolverLoadFloat(OFFSET_PREDICTOR_VECTOR + uint2(i, 0)))
+                            abs(SolverLoadFloat(OFFSET_NR_VECTOR + uint2(i, 0)) - SolverLoadFloat(OFFSET_PREDICTOR_VECTOR + uint2(i, 0)))
                             );
     }
     normalized_error = normalized_error * SolverLoadFloat(OFFSET_TIME_STEP) / (SolverLoadFloat(OFFSET_TIME_STEP) + get_data_i_data_im1_timestep(1) + ((STEP_ORDER == 1) ? 0 : get_data_i_data_im1_timestep(2)));
@@ -329,7 +329,21 @@ uint determine_time_step_and_order(uint2 pixel)
     {
         result = SolverStoreUInt(min(2u, SolverLoadUInt(OFFSET_STEPS_N)));
     }
-    // TODO: Adaptive time-step adjustment. Preserve the existing time step for now.
+    else if (!any(pixel - OFFSET_TIME_STEP))
+    {
+        // TODO: Adaptive time-step adjustment. Preserve the existing time step for now.
+        float err = calc_normalized_error();
+        if (isnan(err) || err == 0)
+        {
+            result = SolverStoreFloat(SolverLoadFloat(OFFSET_TIME_STEP) * 1.5);
+        }
+        else
+        {
+            result = SolverStoreFloat(SolverLoadFloat(OFFSET_TIME_STEP) * min(1.1, pow(err / (MAX_NORM_ERR * 0.8), -1.0 / (STEP_ORDER + 1.0))));
+        }
+
+    }
+    
     return result;
 }
 
@@ -424,14 +438,14 @@ uint flowControl(uint2 pixel)
                 else
                 {
                     //TODO:Evaluate the error and determine use this answer or not
-                    /*if (calc_normalized_error() > MAX_NORM_ERR)
+                    if (calc_normalized_error() > MAX_NORM_ERR)
                     {
                         data = STATE_DETERMINE_TIME_STEP_AND_ORDER;
                     }
                     else
-                    {*/
+                    {
                         data = STATE_UPDATE_NR_VECTOR + 1;
-                    //}
+                    }
                 }
             }
             else
