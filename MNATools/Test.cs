@@ -15,6 +15,7 @@ public class Test : UdonSharpBehaviour
     [SerializeField] TMP_InputField probefield;
     [SerializeField] TMP_InputField scalefield;
     [SerializeField] TMP_InputField stepsPerFrame;
+    [SerializeField] TMP_InputField maxError;
     private MNAGen generator;
     private MNASolve solver;
     private int oscind = -1; //oscilloscope index
@@ -43,9 +44,12 @@ public class Test : UdonSharpBehaviour
         }
 
         int steps = 100;
+        float maxerror = 0.05f;
         int.TryParse(stepsPerFrame.text, out steps);
+        float.TryParse(maxError.text, out maxerror);
         if (steps > 0) {
             solver.SetStepPerFrame(steps);
+            solver.SetPCError(maxerror);
         }
     }
 

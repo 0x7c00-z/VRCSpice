@@ -2,8 +2,19 @@ Shader "Unlit/FlowControl"
 {
     Properties
     {
+        _DATA_N ("The number of datas", Integer) = 1 //size of the vector to be solved
+
+        [HideInInspector] _BufferTemplate ("Solver Buffer Template", 2D) = "black" {}
+
+        //Inputs
+        _A ("A", 2D) = "black" {}
+        _B ("B", 2D) = "black" {}
+        _C ("C", 2D) = "black" {}
+        _Is ("Is", 2D) = "black" {}
+        _rhs ("rhs", 2D) = "black" {}
+        _DeltaTime ("Delta time", Float) = 0.01
+        _MaxPCError ("Maximum Predictor-Corrector Error", Float) = 0.05
         _MainTex ("Texture", 2D) = "black" {}
-        _DATA_N ("The number of datas", Integer) = 1
     }
     SubShader
     {

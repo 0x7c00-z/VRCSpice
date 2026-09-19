@@ -21,6 +21,7 @@ public class MNASolve : UdonSharpBehaviour
     bool outputBuffer0 = false;//For double buffering
     private int stepperframe = 100;
     private float deltatime = 0.0001f;
+    private float maxPCError = 0.05f;
     bool initialized = false;
     const int buflen = 100;
 
@@ -42,6 +43,7 @@ public class MNASolve : UdonSharpBehaviour
     private void Update()
     {
         processor.SetFloat("_DeltaTime", deltatime);
+        processor.SetFloat("_MaxPCError", maxPCError);
         if(initialized && (!stepexecution || EXECUTE)) {
             Process();
             EXECUTE = false;
@@ -51,6 +53,10 @@ public class MNASolve : UdonSharpBehaviour
     public void SetStepPerFrame(int steps)
     {
         stepperframe = steps;
+    }
+    public void SetPCError(float err)
+    {
+        maxPCError = err;
     }
 
     public int label2bufferRow(string label)

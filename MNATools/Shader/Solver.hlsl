@@ -47,7 +47,6 @@ while(true){
 #define STATE_PUSH_TO_OUTPUT 9
 
 #define PRECISION 0.000001
-#define MAX_NORM_ERR 0.05
 #define MAX_NR_ITER_N 64
 
 float get_data(uint index, uint row)
@@ -348,7 +347,7 @@ uint determine_time_step_and_order(uint2 pixel)
         }
         else
         {
-            result = SolverStoreFloat(SolverLoadFloat(OFFSET_TIME_STEP) * min(2.0, pow(err / (MAX_NORM_ERR * 0.8), -1.0 / (STEP_ORDER + 1.0))));
+            result = SolverStoreFloat(SolverLoadFloat(OFFSET_TIME_STEP) * min(2.0, pow(err / (_MaxPCError * 0.8), -1.0 / (STEP_ORDER + 1.0))));
         }
 
     }
@@ -450,7 +449,7 @@ uint flowControl(uint2 pixel)
                 else
                 {
                     //TODO:Evaluate the error and determine use this answer or not
-                    if (calc_normalized_error() > MAX_NORM_ERR)
+                    if (calc_normalized_error() > _MaxPCError)
                     {
                         data = STATE_DETERMINE_TIME_STEP_AND_ORDER;
                     }
