@@ -12,7 +12,13 @@ Shader "Unlit/FlowControl"
 
         Pass
         {
+            Cull Off
+            ZWrite Off
+            ZTest Always
+            Blend Off
+
             CGPROGRAM
+            #pragma target 4.0
             #pragma vertex vert
             #pragma fragment frag
 
@@ -39,10 +45,9 @@ Shader "Unlit/FlowControl"
                 return o;
             }
 
-            float frag (v2f i) : SV_Target
+            uint frag (v2f i) : SV_Target
             {
                 return flowControl(uv2texel(i.uv));
-                //return _MainTex[uv2texel(i.uv)].r + 0.001; //DEBUG
             }
             ENDCG
         }

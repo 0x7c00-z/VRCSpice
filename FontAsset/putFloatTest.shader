@@ -49,18 +49,18 @@ Shader "Unlit/putFloatTest"
                 //uint ind = input[0].vid;
                 float2 center = float2(0, 0);
                 float2 cursur = 0;
-                uint state = asuint(_MainTex[uint2(0, 0)]);
-                //float val = _MainTex[uint2(0, 4)];
+                uint state = SolverLoadUInt(uint2(0, 0));
+                //float val = SolverLoadFloat(uint2(0, 4));
 
                 float data = 0;
                 data = calc_normalized_error();
 
-                putFloatChar(center + cursur, LINE, 0, asuint(_MainTex[OFFSET_SOLVER_STATE].r), 20, stream);
+                putFloatChar(center + cursur, LINE, 0, SolverLoadUInt(OFFSET_SOLVER_STATE), 20, stream);
                 cursur.y -= LINE;
                 putFloatChar(center + cursur, LINE, 0, data, 8, stream);
                 cursur.y -= LINE;
 
-                data = _MainTex[OFFSET_TIME_STEP];
+                data = SolverLoadFloat(OFFSET_TIME_STEP);
                 putFloatChar(center + cursur, LINE, 0, data, 8, stream);
             }
             ENDCG

@@ -48,167 +48,147 @@ while(true){
 
 #define PRECISION 0.000001
 #define MAX_NORM_ERR 1.0
-#define STEP_ORDER round(_MainTex[OFFSET_STEP_ORDER].r)
 
 float get_data(uint index, uint row)
 {
     //get data from output
-    float data = _MainTex[OFFSET_OUT_BUFFER + uint2(row, index)].r; //get current data to be processed
+    float data = SolverLoadFloat(OFFSET_OUT_BUFFER + uint2(row, index)); //get current data to be processed
     return data;
 }
 
 float get_data_i_data_im1_timestep(uint index)
 {
     //get the timestep between datai and datai-1
-    float data = _MainTex[OFFSET_OUT_BUFFER + uint2(_DATA_N, index)].r; //get current data to be processed
+    float data = SolverLoadFloat(OFFSET_OUT_BUFFER + uint2(_DATA_N, index)); //get current data to be processed
     return data;
 }
 
-float push_to_output(uint2 pixel)
+uint push_to_output(uint2 pixel)
 {
-    //push the current NR vector to the OFFSET_OUT_BUFFER + uint2(0, 0), and OFFSET_OUT_BUFFER + uint2(N, M) to OFFSET_OUT_BUFFER + uint2(N, M+1)
-    float data = _MainTex[pixel].r; //get current data to be processed
+    uint result = SolverLoadUInt(pixel);
     if (!any(pixel - OFFSET_STEPS_N))
     {
-        data = asfloat(asuint(data) + 1);
+        result = SolverStoreUInt(SolverLoadUInt(pixel) + 1u);
     }
-    if ((int) pixel.y > (int) OFFSET_OUT_BUFFER.y)
+    if (pixel.y > OFFSET_OUT_BUFFER.y)
     {
-        //slide and push
-        
-        data = _MainTex[pixel - uint2(0, 1)].r;
+        result = SolverLoadUInt(pixel - uint2(0, 1));
     }
-    else if ((int) pixel.y == (int) OFFSET_OUT_BUFFER.y)
+    if (pixel.y == OFFSET_OUT_BUFFER.y)
     {
-        //push NR vector to output buffer
-        data = _MainTex[OFFSET_NR_VECTOR + uint2(pixel.x, 0)].r;
-        if (pixel.x == _DATA_N)
-        {
-            //save the delta time next to the last pixel of the output buffer
-            data = _MainTex[OFFSET_TIME_STEP].r;
-        }
+        // Store the accepted time step beside the solution vector.
+        result = SolverLoadUInt(pixel.x == _DATA_N
+            ? OFFSET_TIME_STEP : OFFSET_NR_VECTOR + uint2(pixel.x, 0));
     }
-    return data;
+    return result;
 }
 
-float generate_yacobi_matrix_and_vector(uint2 pixel)
+uint generate_yacobi_matrix_and_vector(uint2 pixel)
 {
-    //1st order gear method
-    //solve $$A\mathbf{x}+B\mathbf{\dot{x}}+\mathbf{I_s}\odot\left[\exp\left(C\mathbf{x}\right)-1\right]-\mathbf{b_{rhs}} = 0$$
-    //like (A+\frac{B}{\Delta t})\mathbf{x}^{n+1} + \mathbf{I_s}\odot\left[\exp\left(C\mathbf{x}^{n+1}\right)-1\right]-\mathbf{b_{rhs}} - \frac{B}{\Delta t}\mathbf{x}^n =0
-    float data = _MainTex[pixel].r; //get current data to be processed
-    //generate yacobi matrix here and store it in the texture
-    if (pixel.y == 0)
+    uint result = SolverLoadUInt(pixel);
+    if (OFFSET_YACOBI_MATRIX.y <= pixel.y && pixel.y < OFFSET_YACOBI_MATRIX.y + _DATA_N)
     {
-        return data;
-    }
-    else if (OFFSET_YACOBI_MATRIX.y <= pixel.y && pixel.y < OFFSET_YACOBI_MATRIX.y + _DATA_N)
-    {
-        //generate yacobi matrix
         pixel -= OFFSET_YACOBI_MATRIX;
-        data = dfidxj(pixel.x, pixel.y) + dfidxdotj(pixel.x, pixel.y) / _MainTex[OFFSET_TIME_STEP].r;
+        result = SolverStoreFloat(dfidxj(pixel.x, pixel.y)
+            + dfidxdotj(pixel.x, pixel.y) / SolverLoadFloat(OFFSET_TIME_STEP));
     }
-    else if (pixel.y == OFFSET_INVERSE_VECTOR.y)
+    if (pixel.y == OFFSET_INVERSE_VECTOR.y)
     {
-        //generate vector
-        data = f(pixel.x);
+        result = SolverStoreFloat(f(pixel.x));
     }
-    return data;
+    return result;
 }
 
-float update_nr_vector(uint2 pixel)
+uint update_nr_vector(uint2 pixel)
 {
-    //update the vector by adding the solved vector to the current vector, and store it in the OFFSET_NR_VECTOR + uint2(0, 0) to OFFSET_NR_VECTOR + uint2(N-1, 0)
-    float data = _MainTex[pixel].r; //get current data to be processed
+    uint result = SolverLoadUInt(pixel);
     if (pixel.y == OFFSET_NR_VECTOR.y)
     {
-        data -= max(-1.0, min(1.0, _MainTex[OFFSET_INVERSE_VECTOR + uint2(pixel.x, 0)].r));
+        float data = SolverLoadFloat(pixel);
+        data -= max(-1.0, min(1.0, SolverLoadFloat(OFFSET_INVERSE_VECTOR + uint2(pixel.x, 0))));
+        result = SolverStoreFloat(data);
     }
-    return data;
+    return result;
 }
 
-float lu_decomposition(uint2 pixel)
+uint lu_decomposition(uint2 pixel)
 {
+    uint result = SolverLoadUInt(pixel);
     
 //pivotting function to get the correct value from the texture after pivotting, this is used in the lu decomposition process.
 //this replace LOOP_COUNTER with the max_index to get the correct value from the texture after pivotting
 #define PIVOTTING(x) ((x == k) ? max_index : ((x == max_index) ? k : x))
     
     //perform lu decomposition on the yacobi matrix, and store the inverse of the diagonal of the yacobi matrix in the OFFSET_INVERSE_VECTOR + uint2(0, 0) to OFFSET_INVERSE_VECTOR + uint2(N-1, 0)
-    float data = _MainTex[pixel].r; //get current data to be processed
     uint k = LOOP_I; //get current loop counter
     uint max_index = k;
-    float max_value = abs(_MainTex[OFFSET_YACOBI_MATRIX + uint2(k, k)].r);
-    if (pixel.y == 0)
-    {
-        return data;
-    }
+    float max_value = abs(SolverLoadFloat(OFFSET_YACOBI_MATRIX + uint2(k, k)));
     if ((OFFSET_YACOBI_MATRIX.y <= pixel.y && pixel.y < OFFSET_YACOBI_MATRIX.y + _DATA_N) || pixel.y == OFFSET_INVERSE_VECTOR.y)//if yabobi matrix or inverse vector
     {
         [loop]
         for (uint i = k + 1; i < _DATA_N; i++)
         {
             //look for the maximum value in the current column to avoid numerical instability
-            if (max_value < abs(_MainTex[OFFSET_YACOBI_MATRIX + uint2(i, k)].r))
+            if (max_value < abs(SolverLoadFloat(OFFSET_YACOBI_MATRIX + uint2(i, k))))
             {
-                max_value = abs(_MainTex[OFFSET_YACOBI_MATRIX + uint2(i, k)].r);
+                max_value = abs(SolverLoadFloat(OFFSET_YACOBI_MATRIX + uint2(i, k)));
                 max_index = i;
             }
         }
         
-        data = _MainTex[uint2(PIVOTTING(pixel.x), pixel.y)].r;
+        float data = SolverLoadFloat(uint2(PIVOTTING(pixel.x), pixel.y));
         
         //multiply both INVERSE_VECTOR and YACOBI_MATRIX by same matrix do pivotting and lu decomposition at the same time
         if (pixel.x > k)
         {
-            data -= _MainTex[uint2(PIVOTTING(k), pixel.y)] * _MainTex[OFFSET_YACOBI_MATRIX + uint2(PIVOTTING(pixel.x), k)] / _MainTex[OFFSET_YACOBI_MATRIX + uint2(PIVOTTING(k), k)].r;
+            data -= SolverLoadFloat(uint2(PIVOTTING(k), pixel.y)) * SolverLoadFloat(OFFSET_YACOBI_MATRIX + uint2(PIVOTTING(pixel.x), k)) / SolverLoadFloat(OFFSET_YACOBI_MATRIX + uint2(PIVOTTING(k), k));
         }
+        result = SolverStoreFloat(data);
     }
-    return data;
 
 #undef PIVOTTING
-
+    return result;
 }
 
 
-float solve_vector(uint2 pixel)
+uint solve_vector(uint2 pixel)
 {
-    //perform forward and backward substitution to solve the vector, and store the solved vector in the OFFSET_INVERSE_VECTOR + uint2(0, 0) to OFFSET_INVERSE_VECTOR + uint2(N-1, 0)
-    float data = _MainTex[pixel].r; //get current data to be processed
-    if (pixel.y == OFFSET_INVERSE_VECTOR.y)
+    uint result = SolverLoadUInt(pixel);
+    if (pixel.y == OFFSET_INVERSE_VECTOR.y && pixel.x == _DATA_N - 1 - LOOP_I)
     {
-        if (pixel.x == _DATA_N - 1 - LOOP_I)
+        float data = SolverLoadFloat(pixel);
+        for (uint i = pixel.x + 1; i < _DATA_N; i++)
         {
-            for (uint i = pixel.x + 1; i < _DATA_N; i++)
-            {
-                data -= _MainTex[OFFSET_YACOBI_MATRIX + uint2(pixel.x, i)].r * _MainTex[OFFSET_INVERSE_VECTOR + uint2(i, 0)].r;
-            }
-            data /= _MainTex[OFFSET_YACOBI_MATRIX + uint2(pixel.x, pixel.x)].r;
+            data -= SolverLoadFloat(OFFSET_YACOBI_MATRIX + uint2(pixel.x, i))
+                * SolverLoadFloat(OFFSET_INVERSE_VECTOR + uint2(i, 0));
         }
+        data /= SolverLoadFloat(OFFSET_YACOBI_MATRIX + uint2(pixel.x, pixel.x));
+        result = SolverStoreFloat(data);
     }
-    return data;
+    return result;
 }
 
-float generate_xdot_vector(uint2 pixel)
+uint generate_xdot_vector(uint2 pixel)
 {
-    //generate the xdot vector by using the solved vector and the previous vector, and store it in the OFFSET_XDOT_VECTOR + uint2(0, 0) to OFFSET_XDOT_VECTOR + uint2(N-1, 0)
-    float data = _MainTex[pixel].r; //get current data to be processed
+    uint result = SolverLoadUInt(pixel);
     if (pixel.y == OFFSET_XDOT_VECTOR.y)
     {
-        data = _MainTex[OFFSET_COF_COR_NP1].r * _MainTex[OFFSET_NR_VECTOR + uint2(pixel.x, 0)].r + _MainTex[OFFSET_COF_COR_N].r * get_data(0, pixel.x)
-            + _MainTex[OFFSET_COF_COR_NM1].r * get_data(1, pixel.x);
+        float data = SolverLoadFloat(OFFSET_COF_COR_NP1) * SolverLoadFloat(OFFSET_NR_VECTOR + uint2(pixel.x, 0))
+            + SolverLoadFloat(OFFSET_COF_COR_N) * get_data(0, pixel.x)
+            + SolverLoadFloat(OFFSET_COF_COR_NM1) * get_data(1, pixel.x);
+        result = SolverStoreFloat(data);
     }
-    return data;
+    return result;
 }
 
-float initialize(uint2 pixel)
+uint initialize(uint2 pixel)
 {
-    float data = 0;
+    uint result = SolverStoreUInt(0u);
     if (!any(pixel - OFFSET_TIME_STEP))
     {
-        data = _DeltaTime;
+        result = SolverStoreFloat(_DeltaTime);
     }
-    return data;
+    return result;
 }
 
 float2x2 inverse_matrix(float2x2 mat)
@@ -241,14 +221,15 @@ float3x3 inverse_matrix(float3x3 mat)
 }
 
 
-float generate_coefficients(uint2 pixel)
+uint generate_coefficients(uint2 pixel)
 {
-    float data = _MainTex[pixel].r; //get current data to be processed
+    uint result = SolverLoadUInt(pixel);
+    float data = 0.0;
     [branch]
     if (pixel.x - OFFSET_COF_PRE_N.x < 3 && pixel.y == OFFSET_COF_PRE_N.y) //if predictor coefficient
     {
         //float t_n+1 = 0;
-        float t_n = -_MainTex[OFFSET_TIME_STEP].r;
+        float t_n = -SolverLoadFloat(OFFSET_TIME_STEP);
         float t_n_m1 = t_n-get_data(0, _DATA_N);
         float t_n_m2 = t_n_m1-get_data(1, _DATA_N);
         switch (STEP_ORDER)
@@ -276,10 +257,11 @@ float generate_coefficients(uint2 pixel)
                 data = mat2[0][pixel.x - OFFSET_COF_PRE_N.x];
                 break;
         }
+        result = SolverStoreFloat(data);
     }
     else if (pixel.x - OFFSET_COF_COR_NP1.x < 3 && pixel.y == OFFSET_COF_COR_NP1.y)//if corrector coefficient
     {
-        float t_n = -_MainTex[OFFSET_TIME_STEP].r;
+        float t_n = -SolverLoadFloat(OFFSET_TIME_STEP);
         float t_n_m1 = t_n - get_data(0, _DATA_N);
         switch (STEP_ORDER)
         {
@@ -298,28 +280,31 @@ float generate_coefficients(uint2 pixel)
                 data = mat2[1][pixel.x - OFFSET_COF_COR_NP1.x];
                 break;
         }
+        result = SolverStoreFloat(data);
     }
-    return data;
+    return result;
 }
 
-float generate_predictor_vector(uint2 pixel)
+uint generate_predictor_vector(uint2 pixel)
 {
-    float data = _MainTex[pixel].r; //get current data to be processed
+    uint result = SolverLoadUInt(pixel);
     if (pixel.y == OFFSET_PREDICTOR_VECTOR.y || pixel.y == OFFSET_NR_VECTOR.y){
+        float data = 0.0;
         switch (STEP_ORDER)
         {
             case 0:
-                data = get_data(0, pixel.x) * _MainTex[OFFSET_COF_PRE_N + uint2(0, 0)].r;
+                data = get_data(0, pixel.x) * SolverLoadFloat(OFFSET_COF_PRE_N + uint2(0, 0));
                 break;
             case 1:
-                data = get_data(0, pixel.x) * _MainTex[OFFSET_COF_PRE_N + uint2(0, 0)].r + get_data(1, pixel.x) * _MainTex[OFFSET_COF_PRE_NM1].r;
+                data = get_data(0, pixel.x) * SolverLoadFloat(OFFSET_COF_PRE_N + uint2(0, 0)) + get_data(1, pixel.x) * SolverLoadFloat(OFFSET_COF_PRE_NM1);
                 break;
             case 2:
-                data = get_data(0, pixel.x) * _MainTex[OFFSET_COF_PRE_N + uint2(0, 0)].r + get_data(1, pixel.x) * _MainTex[OFFSET_COF_PRE_NM1].r + get_data(2, pixel.x) * _MainTex[OFFSET_COF_PRE_NM2].r;
+                data = get_data(0, pixel.x) * SolverLoadFloat(OFFSET_COF_PRE_N + uint2(0, 0)) + get_data(1, pixel.x) * SolverLoadFloat(OFFSET_COF_PRE_NM1) + get_data(2, pixel.x) * SolverLoadFloat(OFFSET_COF_PRE_NM2);
                 break;
         }
+        result = SolverStoreFloat(data);
     }
-    return data;
+    return result;
 }
 
 
@@ -330,38 +315,22 @@ float calc_normalized_error()
     for (uint i = 0; i < _DATA_N; i++)
     {
         normalized_error = max(normalized_error,
-                            (abs(_MainTex[OFFSET_NR_VECTOR + uint2(i, 0)].r) - _MainTex[OFFSET_PREDICTOR_VECTOR + uint2(i, 0)].r)
+                            (abs(SolverLoadFloat(OFFSET_NR_VECTOR + uint2(i, 0))) - SolverLoadFloat(OFFSET_PREDICTOR_VECTOR + uint2(i, 0)))
                             );
     }
-    normalized_error = normalized_error * _MainTex[OFFSET_TIME_STEP].r / (_MainTex[OFFSET_TIME_STEP].r + get_data_i_data_im1_timestep(1) + ((STEP_ORDER == 1) ? 0 : get_data_i_data_im1_timestep(2)));
+    normalized_error = normalized_error * SolverLoadFloat(OFFSET_TIME_STEP) / (SolverLoadFloat(OFFSET_TIME_STEP) + get_data_i_data_im1_timestep(1) + ((STEP_ORDER == 1) ? 0 : get_data_i_data_im1_timestep(2)));
     return normalized_error;
 }
 
-float determine_time_step_and_order(uint2 pixel)
+uint determine_time_step_and_order(uint2 pixel)
 {
-    float data = _MainTex[pixel].r; //get current data to be processed
+    uint result = SolverLoadUInt(pixel);
     if (!any(pixel - OFFSET_STEP_ORDER))
     {
-        //カウンタもstateも普通に動いたのにこれは2^23をたさないと動かない？？？？←これも動いてない??←普通にfloatで一旦やりましょう
-        uint order = min(2, asuint(_MainTex[OFFSET_STEPS_N].r));
-        //order = 0; //DEBUG
-        return order;
-
+        result = SolverStoreUInt(min(2u, SolverLoadUInt(OFFSET_STEPS_N)));
     }
-    else if (!any(pixel - OFFSET_TIME_STEP))
-    {
-        /*float err = calc_normalized_error();
-        if (isnan(err) || err == 0)
-        {
-            data = data * 1.5;
-        }
-        else
-        {
-            data = data * max(1.1, pow(err, -1.0 / (STEP_ORDER + 1.0)));
-        }*/
-
-    }
-    return data;
+    // TODO: Adaptive time-step adjustment. Preserve the existing time step for now.
+    return result;
 }
 
 
@@ -372,40 +341,53 @@ uint2 uv2texel(float2 uv)
 
 
 
-float process(uint2 uv)
+uint process(uint2 uv)
 {
+    uint result = 0u;
     switch (STATE)
     {
         case STATE_DETERMINE_TIME_STEP_AND_ORDER:
-            return determine_time_step_and_order(uv);
+            result = determine_time_step_and_order(uv);
+            break;
         case STATE_GENERATE_COEFFICIENTS:
-            return generate_coefficients(uv);
+            result = generate_coefficients(uv);
+            break;
         case STATE_GENERATE_PREDICTOR_VECTOR:
-            return generate_predictor_vector(uv);
+            result = generate_predictor_vector(uv);
+            break;
         case STATE_INITIALIZE:
-            return initialize(uv);
+            result = initialize(uv);
+            break;
         case STATE_GENERATE_XDOT_VECTOR:
-            return generate_xdot_vector(uv);
+            result = generate_xdot_vector(uv);
+            break;
         case STATE_GENERATE_MATRIX_and_VECTOR:
-            return generate_yacobi_matrix_and_vector(uv);
+            result = generate_yacobi_matrix_and_vector(uv);
+            break;
         case STATE_LU_DECOMPOSITION:
-            return lu_decomposition(uv);
+            result = lu_decomposition(uv);
+            break;
         case STATE_SOLVE_VECTOR:
-            return solve_vector(uv);
+            result = solve_vector(uv);
+            break;
         case STATE_UPDATE_NR_VECTOR:
-            return update_nr_vector(uv);
+            result = update_nr_vector(uv);
+            break;
         case STATE_PUSH_TO_OUTPUT:
-            return push_to_output(uv);
+            result = push_to_output(uv);
+            break;
         default:
-            return 0;
+            result = 0;
+            break;
     }
+    return result;
 }
 
 
-float flowControl(uint2 pixel)
+uint flowControl(uint2 pixel)
 {
-    //control the flow of the solver by using the OFFSET_SOLVER_STATE and OFFSET_LOOP_COUNTER in the texture, and return 0 for all pixels except the control pixels
-    uint data = asuint(_MainTex[pixel].r); //get current data to be processed
+    //Update uint control fields and copy every other texel without conversion.
+    uint data = SolverLoadUInt(pixel); //get current data to be processed
     
     if (!any(pixel - OFFSET_SOLVER_STATE))
     {
@@ -429,7 +411,7 @@ float flowControl(uint2 pixel)
             [loop]
             for (uint i = 0; i < _DATA_N; i++)
             {
-                invvec_len_squared += pow(abs(_MainTex[OFFSET_INVERSE_VECTOR + uint2(i, 0)].r), 2.0);
+                invvec_len_squared += pow(abs(SolverLoadFloat(OFFSET_INVERSE_VECTOR + uint2(i, 0))), 2.0);
             }
             
             if (invvec_len_squared < PRECISION)
@@ -442,14 +424,14 @@ float flowControl(uint2 pixel)
                 else
                 {
                     //TODO:Evaluate the error and determine use this answer or not
-                    if (calc_normalized_error() > MAX_NORM_ERR)
+                    /*if (calc_normalized_error() > MAX_NORM_ERR)
                     {
                         data = STATE_DETERMINE_TIME_STEP_AND_ORDER;
                     }
                     else
-                    {
+                    {*/
                         data = STATE_UPDATE_NR_VECTOR + 1;
-                    }
+                    //}
                 }
             }
             else
@@ -484,5 +466,5 @@ float flowControl(uint2 pixel)
                 break;
         }
     }
-    return asfloat(data);
+    return SolverStoreUInt(data);
 }

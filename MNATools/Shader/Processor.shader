@@ -4,6 +4,8 @@ Shader "Unlit/Processor"
     {
         _DATA_N ("The number of datas", Integer) = 1 //size of the vector to be solved
 
+        [HideInInspector] _BufferTemplate ("Solver Buffer Template", 2D) = "black" {}
+
         //Inputs
         _A ("A", 2D) = "black" {}
         _B ("B", 2D) = "black" {}
@@ -20,7 +22,13 @@ Shader "Unlit/Processor"
 
         Pass
         {
+            Cull Off
+            ZWrite Off
+            ZTest Always
+            Blend Off
+
             CGPROGRAM
+            #pragma target 4.0
             #pragma vertex vert
             #pragma fragment frag
 
@@ -47,9 +55,8 @@ Shader "Unlit/Processor"
                 return o;
             }
 
-            float frag (v2f i) : SV_Target
+            uint frag (v2f i) : SV_Target
             {
-                //return _MainTex[uv2texel(i.uv)].r; //DEBUG
                 return process(uv2texel(i.uv));
             }
             ENDCG

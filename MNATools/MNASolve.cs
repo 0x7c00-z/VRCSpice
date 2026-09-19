@@ -1,5 +1,4 @@
 ﻿
-using System;
 using UdonSharp;
 using UnityEngine;
 using VRC.SDK3.Data;
@@ -117,6 +116,22 @@ public class MNASolve : UdonSharpBehaviour
         outputBuffer0 = !outputBuffer0;
     }
 
+    private RenderTexture CreateSolverBuffer(int width, int height)
+    {
+        // Udon exposes the copy constructor, but not the GraphicsFormat constructor.
+        // The processor material references an R32_UInt template asset.
+        RenderTexture buffer = new RenderTexture((RenderTexture)processor.GetTexture("_BufferTemplate"));
+        buffer.width = width;
+        buffer.height = height;
+        buffer.filterMode = FilterMode.Point;
+        buffer.wrapMode = TextureWrapMode.Clamp;
+        buffer.useMipMap = false;
+        buffer.autoGenerateMips = false;
+        buffer.antiAliasing = 1;
+        buffer.Create();
+        return buffer;
+    }
+
     public void ChangeCircuit(DataList newlabel)
     {
         //generate new buffer
@@ -130,28 +145,28 @@ public class MNASolve : UdonSharpBehaviour
         int height = Mathf.NextPowerOfTwo(5 + newmatrixsize + buflen);
         int mattexsize = Mathf.NextPowerOfTwo(newmatrixsize);
 
-        buffer0 = new RenderTexture(width, height, 0, RenderTextureFormat.RInt);
-        buffer1 = new RenderTexture(width, height, 0, RenderTextureFormat.RInt);
-        tmpbuffer = new RenderTexture(width, height, 0, RenderTextureFormat.RInt);
-
-        buffer0.Create();
-        buffer1.Create();
-        tmpbuffer.Create();
+        buffer0 = CreateSolverBuffer(width, height);
+        buffer1 = CreateSolverBuffer(width, height);
+        tmpbuffer = CreateSolverBuffer(width, height);
 
         //copy old buffer to new buffer
         Texture2D indexerbuf = new Texture2D(width, 1, TextureFormat.RFloat, false);
         for (int i = 0; i < newmatrixsize; i++)
         {
-            indexerbuf.SetPixel(i, 0, new Color(BitConverter.Int32BitsToSingle(veclabels.IndexOf((string)newlabel[i])), 0, 0));
+            indexerbuf.SetPixel(i, 0, new Color(veclabels.IndexOf((string)newlabel[i]), 0, 0));
         }
         for(int i = newmatrixsize; i < width; i++)
         {
-            indexerbuf.SetPixel(i, 0, new Color(BitConverter.Int32BitsToSingle(-1), 0, 0));
+            indexerbuf.SetPixel(i, 0, new Color(-1, 0, 0));
         }
 
+        // Preserve the time-step column alongside the remapped solution history.
+        indexerbuf.SetPixel(newmatrixsize, 0, new Color(matrixsize > 0 ? matrixsize : -1, 0, 0));
+        indexerbuf.filterMode = FilterMode.Point;
+        indexerbuf.wrapMode = TextureWrapMode.Clamp;
         indexerbuf.Apply();
         
-        CopyColumn.SetTexture("_IndexTex", indexerbuf);
+        CopyColumn.SetTexture("_IndexMat", indexerbuf);
         CopyColumn.SetInteger("_DstMatSize", newmatrixsize);
         CopyColumn.SetInteger("_SrcMatSize", matrixsize);
         CopyColumn.SetInteger("_DstTexHeight", height);

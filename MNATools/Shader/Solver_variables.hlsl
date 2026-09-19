@@ -4,14 +4,37 @@
 uint _DATA_N; //size of the vector to be solved
 float _DeltaTime; //initial time step
 
-Texture2D _MainTex; //texture containing the flowcontrol, matrix and vector data
+// R32_UInt storage: control fields are native uint; numerical fields hold float bits.
+Texture2D<uint> _MainTex;
 float4 _MainTex_TexelSize;
-//use _MainTex[uint2(row, col) + offset] to get RFloat data, where offset is the offset to the flowcontrol, matrix and vector data respectively
-#define OFFSET_SOLVER_STATE uint2(0, 0) //1 pixel to store the current state of the solver, use this to control the flow of the solver in the shader, use asuint() to get the integer value of the state, and use this value to control the flow of the solver in the shader
-#define OFFSET_LOOP_COUNTER uint2(1, 0) //1 pixel to store the current loop counter, use this to control the flow of the solver in the shader, use asuint() to get the integer value of the loop counter
+
+uint SolverLoadUInt(uint2 pixel)
+{
+    return _MainTex.Load(int3(pixel, 0));
+}
+
+float SolverLoadFloat(uint2 pixel)
+{
+    return asfloat(SolverLoadUInt(pixel));
+}
+
+// Store helpers encode the value returned by a uint SV_Target fragment shader.
+// Copy unchanged texels with SolverLoadUInt to preserve every bit.
+uint SolverStoreUInt(uint value)
+{
+    return value;
+}
+
+uint SolverStoreFloat(float value)
+{
+    return asuint(value);
+}
+
+#define OFFSET_SOLVER_STATE uint2(0, 0) //uint solver state
+#define OFFSET_LOOP_COUNTER uint2(1, 0) //uint loop counter
 #define OFFSET_TIME_STEP uint2(2, 0)
-#define OFFSET_STEPS_N uint2(3, 0) //Step counter
-#define OFFSET_STEP_ORDER uint2(4, 0) //Step order, must be set until xdot generation
+#define OFFSET_STEPS_N uint2(3, 0) //uint step counter
+#define OFFSET_STEP_ORDER uint2(4, 0) //uint step order, set before xdot generation
 #define OFFSET_COF_PRE_N uint2(5, 0)
 #define OFFSET_COF_PRE_NM1 uint2(6, 0)
 #define OFFSET_COF_PRE_NM2 uint2(7, 0)
@@ -25,7 +48,8 @@ float4 _MainTex_TexelSize;
 #define OFFSET_NR_VECTOR uint2(0, 4 + _DATA_N) //vector to be solved and manipulated while LU decomposition and solving
 #define OFFSET_OUT_BUFFER uint2(0, 5 + _DATA_N) //assuming the output buffer is stored after the vector in the texture, You can get last step output by using OFFSET_OUT_BUFFER + uint2(0, 0) and OFFSET_OUT_BUFFER + uint2(0, 1) is older
 
-#define LOOP_I asuint(_MainTex[OFFSET_LOOP_COUNTER].r)
-#define STATE asuint(_MainTex[OFFSET_SOLVER_STATE].r)
+#define LOOP_I SolverLoadUInt(OFFSET_LOOP_COUNTER)
+#define STATE SolverLoadUInt(OFFSET_SOLVER_STATE)
+#define STEP_ORDER SolverLoadUInt(OFFSET_STEP_ORDER)
 
 #endif

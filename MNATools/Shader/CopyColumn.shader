@@ -15,11 +15,18 @@ Shader "Unlit/CopyColumn"
 
         Pass
         {
+            Cull Off
+            ZWrite Off
+            ZTest Always
+            Blend Off
+
             CGPROGRAM
+            #pragma target 4.0
             #pragma vertex vert
             #pragma fragment frag
 
             #include "UnityCG.cginc"
+            #include "Solver_variables.hlsl"
 
             struct appdata
             {
@@ -33,10 +40,8 @@ Shader "Unlit/CopyColumn"
                 float4 vertex : SV_POSITION;
             };
 
-            Texture2D _MainTex;
             float4 _MainTex_ST;
-            float4 _MainTex_TexelSize;
-            Texture2D _IndexMat;
+            Texture2D<float> _IndexMat; //Numeric column indices; -1 means no previous column.
             float4 _IndexMat_TexelSize;
             int _SrcMatSize;
             int _DstMatSize;
@@ -50,17 +55,21 @@ Shader "Unlit/CopyColumn"
                 return o;
             }
 
-            float frag (v2f i) : SV_Target
+            uint frag (v2f i) : SV_Target
             {
-                uint2 dstTexcoord = (uint2)(i.uv * float2(_IndexMat_TexelSize.x, _DstTexHeight));
-                if((int)dstTexcoord.y < _DstMatSize + 3){
-                    return 0;
+                uint2 dstTexcoord = (uint2)(i.uv * float2(_IndexMat_TexelSize.z, _DstTexHeight));
+                if (_SrcMatSize == 0 || (int)dstTexcoord.y < _DstMatSize + 3)
+                {
+                    return SolverStoreUInt(0u);
                 }
-                int srcCol = (int)asuint(_IndexMat[uint2(dstTexcoord.x, 0)]);
-                if(srcCol < 0){
-                    return 0;
+                int srcCol = (int)_IndexMat.Load(int3(dstTexcoord.x, 0, 0));
+                int srcRow = (int)dstTexcoord.y - _DstMatSize + _SrcMatSize;
+                if (srcCol < 0 || srcCol >= (int)_MainTex_TexelSize.z
+                    || srcRow < 0 || srcRow >= (int)_MainTex_TexelSize.w)
+                {
+                    return SolverStoreUInt(0u);
                 }
-                return _MainTex[uint2(srcCol, dstTexcoord.y - _DstMatSize + _SrcMatSize)];
+                return SolverLoadUInt(uint2(srcCol, srcRow));
             }
             ENDCG
         }
