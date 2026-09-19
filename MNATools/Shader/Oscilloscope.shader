@@ -6,7 +6,7 @@ Shader "Unlit/Oscilloscope"
         _Row ("Row", Integer) = 0
         _YScale ("YScale", Float) = 1.0
         _MainColor ("MainColor", Color) = (1,1,1,1)
-        _Time_Scale ("Time_Scale", Float) = 1.0
+        _XScale ("XScale", Float) = 1.0
     }
     SubShader
     {
@@ -30,7 +30,7 @@ Shader "Unlit/Oscilloscope"
             uint _Row;
             float _YScale;
             float4 _MainColor;
-            float _Time_Scale;
+            float _XScale;
 
             struct appdata
             {
@@ -62,7 +62,7 @@ Shader "Unlit/Oscilloscope"
                 o.vertex = float4(0, 0, 0, 1);
                 float time = 0;
                 for(uint i=0;i<LEN;i++){
-                    o.vertex = UnityObjectToClipPos(float4(0.5+time/_Time_Scale, get_data(i, _Row) * _YScale, 0, 1));
+                    o.vertex = UnityObjectToClipPos(float4(0.5+time/_XScale, get_data(i, _Row) * _YScale, 0, 1));
                     time = time - get_data_i_data_im1_timestep(i);
                     stream.Append(o);
                 }

@@ -13,7 +13,8 @@ public class Test : UdonSharpBehaviour
 {
     [SerializeField] TMP_InputField netlistfield;
     [SerializeField] TMP_InputField probefield;
-    [SerializeField] TMP_InputField scalefield;
+    [SerializeField] TMP_InputField yscalefield;
+    [SerializeField] TMP_InputField xscalefield;
     [SerializeField] TMP_InputField stepsPerFrame;
     [SerializeField] TMP_InputField maxError;
     private MNAGen generator;
@@ -36,11 +37,17 @@ public class Test : UdonSharpBehaviour
             }
         }
         float ydiv = 1;
-        float.TryParse(scalefield.text, out ydiv);
+        float xdiv = 1;
+        float.TryParse(yscalefield.text, out ydiv);
+        float.TryParse(xscalefield.text, out xdiv);
         solver.WriteToMaterial(this.GetComponent<Renderer>().material);
 
         if (ydiv > 0) {
             this.GetComponent<Renderer>().material.SetFloat("_YScale", 0.1f / ydiv);
+        }
+        if (xdiv > 0)
+        {
+            this.GetComponent<Renderer>().material.SetFloat("_XScale", 0.1f / xdiv);
         }
 
         int steps = 100;
