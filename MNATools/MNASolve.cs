@@ -141,7 +141,7 @@ public class MNASolve : UdonSharpBehaviour
         //setup new buffer RenderTexture
         RenderTexture buffer0, buffer1, tmpbuffer;
         int newmatrixsize = newlabel.Count;
-        int width = Mathf.NextPowerOfTwo(Mathf.Max(newmatrixsize + 1, 11));
+        int width = Mathf.NextPowerOfTwo(Mathf.Max(newmatrixsize + 1, 12));
         int height = Mathf.NextPowerOfTwo(5 + newmatrixsize + buflen);
         int mattexsize = Mathf.NextPowerOfTwo(newmatrixsize);
 

@@ -47,7 +47,8 @@ while(true){
 #define STATE_PUSH_TO_OUTPUT 9
 
 #define PRECISION 0.000001
-#define MAX_NORM_ERR 0.1
+#define MAX_NORM_ERR 0.05
+#define MAX_NR_ITER_N 64
 
 float get_data(uint index, uint row)
 {
@@ -70,11 +71,11 @@ uint push_to_output(uint2 pixel)
     {
         result = SolverStoreUInt(SolverLoadUInt(pixel) + 1u);
     }
-    if (pixel.y > OFFSET_OUT_BUFFER.y)
+    else if (pixel.y > OFFSET_OUT_BUFFER.y)
     {
         result = SolverLoadUInt(pixel - uint2(0, 1));
     }
-    if (pixel.y == OFFSET_OUT_BUFFER.y)
+    else if (pixel.y == OFFSET_OUT_BUFFER.y)
     {
         // Store the accepted time step beside the solution vector.
         result = SolverLoadUInt(pixel.x == _DATA_N
@@ -107,6 +108,10 @@ uint update_nr_vector(uint2 pixel)
         float data = SolverLoadFloat(pixel);
         data -= max(-1.0, min(1.0, SolverLoadFloat(OFFSET_INVERSE_VECTOR + uint2(pixel.x, 0))));
         result = SolverStoreFloat(data);
+    }
+    else if (!any(pixel - OFFSET_NR_ITER_N))
+    {
+        result++;
     }
     return result;
 }
@@ -337,11 +342,19 @@ uint determine_time_step_and_order(uint2 pixel)
         {
             result = SolverStoreFloat(SolverLoadFloat(OFFSET_TIME_STEP) * 1.5);
         }
+        else if (SolverLoadUInt(OFFSET_NR_ITER_N) >= MAX_NR_ITER_N)
+        {
+            result = SolverStoreFloat(SolverLoadFloat(OFFSET_TIME_STEP) * 0.5);
+        }
         else
         {
-            result = SolverStoreFloat(SolverLoadFloat(OFFSET_TIME_STEP) * min(1.1, pow(err / (MAX_NORM_ERR * 0.8), -1.0 / (STEP_ORDER + 1.0))));
+            result = SolverStoreFloat(SolverLoadFloat(OFFSET_TIME_STEP) * min(2.0, pow(err / (MAX_NORM_ERR * 0.8), -1.0 / (STEP_ORDER + 1.0))));
         }
 
+    }
+    else if (!any(pixel - OFFSET_NR_ITER_N))
+    {
+        result = 0;
     }
     
     return result;
@@ -428,9 +441,8 @@ uint flowControl(uint2 pixel)
                 invvec_len_squared += pow(abs(SolverLoadFloat(OFFSET_INVERSE_VECTOR + uint2(i, 0))), 2.0);
             }
             
-            if (invvec_len_squared < PRECISION)
+            if (invvec_len_squared < PRECISION)//NR iteration converged
             {
-                //NR iteration converged
                 if (STEP_ORDER == 0)
                 {
                     data = STATE_UPDATE_NR_VECTOR + 1; //Next state
@@ -448,9 +460,16 @@ uint flowControl(uint2 pixel)
                     }
                 }
             }
-            else
+            else //NR not converged
             {
-                data = STATE_GENERATE_XDOT_VECTOR; //Not converged, go to next NR iteration
+                if (MAX_NR_ITER_N > SolverLoadUInt(OFFSET_NR_ITER_N))
+                {
+                    data = STATE_GENERATE_XDOT_VECTOR; //go to next NR iteration
+                }
+                else
+                {
+                    data = STATE_DETERMINE_TIME_STEP_AND_ORDER; // Change time step
+                }
             }
 
         }
