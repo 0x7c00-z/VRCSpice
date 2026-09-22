@@ -1,4 +1,4 @@
-﻿
+
 using UdonSharp;
 using UnityEngine;
 using VRC.SDK3.Data;
@@ -14,6 +14,8 @@ public class MNASolve : UdonSharpBehaviour
 
     private RenderTexture buffer0, buffer1, tmpbuffer;
     private Texture2D A, B, C, rhs, Is;
+    private uint[] C_row;
+    private byte[] C_bytes;
     private bool[] needApply;//A, B, C, rhs, Is
     private DataList veclabels;
     private int matrixsize = 0;
@@ -188,7 +190,12 @@ public class MNASolve : UdonSharpBehaviour
         //Setup new matrix texture;
         this.A = new Texture2D(mattexsize, mattexsize, TextureFormat.RFloat, false);
         this.B = new Texture2D(mattexsize, mattexsize, TextureFormat.RFloat, false);
-        this.C = new Texture2D(mattexsize, mattexsize, TextureFormat.RFloat, false);
+        this.C = new Texture2D(32, mattexsize, TextureFormat.RG32, false, true);
+        C.filterMode = FilterMode.Point;
+        C.wrapMode = TextureWrapMode.Clamp;
+        C_row = new uint[C.width * C.height];
+        C_bytes = new byte[C_row.Length * 4];
+        C.LoadRawTextureData(C_bytes);
         this.rhs = new Texture2D(mattexsize, 1, TextureFormat.RFloat, false);
         this.Is = new Texture2D(mattexsize, 1, TextureFormat.RFloat, false);
 
@@ -198,7 +205,6 @@ public class MNASolve : UdonSharpBehaviour
             {
                 this.A.SetPixel(i, j, new Color(0, 0, 0));
                 this.B.SetPixel(i, j, new Color(0, 0, 0));
-                this.C.SetPixel(i, j, new Color(0, 0, 0));
             }
             this.rhs.SetPixel(i, 0, new Color(0, 0, 0));
             this.Is.SetPixel(i, 0, new Color(0, 0, 0));
@@ -206,7 +212,7 @@ public class MNASolve : UdonSharpBehaviour
 
         A.Apply();
         B.Apply();
-        C.Apply();
+        C.Apply(false, false);
         rhs.Apply();
         Is.Apply();
 
@@ -215,6 +221,7 @@ public class MNASolve : UdonSharpBehaviour
         initialized = true;
     }
 
+    //名前からRFloatのテクスチャの該当箇所に書き込むための関数。
     public void WriteCircuit(string row, string column, string tex, float value)
     {
         //used when only a single element of the netlist was changed, so we can just update the corresponding element in the buffer instead of regenerating the whole buffer
@@ -246,10 +253,6 @@ public class MNASolve : UdonSharpBehaviour
                 targettex = B;
                 needApply[1] = true;
                 break;
-            case "C":
-                targettex = C;
-                needApply[2] = true;
-                break;
             case "rhs":
                 targettex = rhs;
                 needApply[3] = true;
@@ -267,10 +270,36 @@ public class MNASolve : UdonSharpBehaviour
         targettex.SetPixel(rowindex, colindex, new Color(value, 0, 0));
     }
 
+    public void WriteNonLinerCircuit(string row, uint[] data)
+    {
+        //see Solver_model.hlsl about implemantation of nonliner things:)
+        needApply[2] = true;
+        int rowindex = veclabels.IndexOf(row);
+        for (int i = 0; i < C.width; i++)
+        {
+            C_row[rowindex* C.width + i] = (i < data.Length) ? data[i] : 0;
+        }
+
+    }
+
+    private void LoadNonlinearTextureData()
+    {
+        // RG32 stores low 16 bits in R and high 16 bits in G.
+        for (int i = 0; i < C_row.Length; i++)
+        {
+            uint value = C_row[i];
+            int offset = i * 4;
+            C_bytes[offset] = (byte)(value & 0xffu);
+            C_bytes[offset + 1] = (byte)((value >> 8) & 0xffu);
+            C_bytes[offset + 2] = (byte)((value >> 16) & 0xffu);
+            C_bytes[offset + 3] = (byte)((value >> 24) & 0xffu);
+        }
+        C.LoadRawTextureData(C_bytes);
+    }
+
     private void ApplyTexture()
     {
-        //used to apply the changes made by WriteCircuit to the buffer
-        //tex is the name of the texture that was updated (A, B, C, rhs or Is)
+        //used to upload textures to GPU
         Texture2D targettex = null;
         for(int i=0; i<needApply.Length; i++)
         {
@@ -286,6 +315,7 @@ public class MNASolve : UdonSharpBehaviour
                         break;
                     case 2:
                         targettex = C;
+                        LoadNonlinearTextureData();
                         break;
                     case 3:
                         targettex = rhs;

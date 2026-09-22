@@ -1,4 +1,4 @@
-﻿
+
 using System;
 using System.Runtime.Remoting.Metadata.W3cXsd2001;
 using UdonSharp;
@@ -114,9 +114,18 @@ public class MNAGen : UdonSharpBehaviour
             {
                 float i_s = (float)consts[0];
                 float v_t = (float)consts[1];
-                solver.WriteCircuit("I_" + comp_name + "_0", (string)nets[0], "C", 1.0f / v_t);
-                solver.WriteCircuit("I_" + comp_name + "_0", (string)nets[1], "C", -1.0f / v_t);
-                solver.WriteCircuit("I_" + comp_name + "_0", "", "Is", i_s);
+                int cathodeIndex = solver.label2bufferRow((string)nets[1]);
+                int anodeIndex = solver.label2bufferRow((string)nets[0]);
+                // f adds a * (exp(b * (v2 - v1)) - 1): v1 = cathode, v2 = anode.
+                uint[] diodeData = new uint[]
+                {
+                    1u,
+                    BitConverter.ToUInt32(BitConverter.GetBytes(i_s), 0),
+                    BitConverter.ToUInt32(BitConverter.GetBytes(1.0f / v_t), 0),
+                    cathodeIndex < 0 ? uint.MaxValue : (uint)cathodeIndex,
+                    anodeIndex < 0 ? uint.MaxValue : (uint)anodeIndex
+                };
+                solver.WriteNonLinerCircuit("I_" + comp_name + "_0", diodeData);
                 solver.WriteCircuit("I_" + comp_name + "_0", "I_" + comp_name + "_0", "A", -1.0f);
                 solver.WriteCircuit((string)nets[0], "I_" + comp_name + "_0", "A", 1.0f);
                 solver.WriteCircuit((string)nets[1], "I_" + comp_name + "_0", "A", -1.0f);
