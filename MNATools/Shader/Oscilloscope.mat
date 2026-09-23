@@ -65,6 +65,8 @@ Material:
         m_Offset: {x: 0, y: 0}
     m_Ints:
     - _Row: 2
+    - _Row1: 0
+    - _Row2: 0
     m_Floats:
     - _BumpScale: 1
     - _Cutoff: 0.5

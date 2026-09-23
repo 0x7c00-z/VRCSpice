@@ -3,7 +3,8 @@ Shader "Unlit/Oscilloscope"
     Properties
     {
         _MainTex ("Texture", 2D) = "black" {}
-        _Row ("Row", Integer) = 0
+        _Row1 ("Row", Integer) = 0
+        _Row2 ("Row", Integer) = 0
         _YScale ("YScale", Float) = 1.0
         _MainColor ("MainColor", Color) = (1,1,1,1)
         _XScale ("XScale", Float) = 1.0
@@ -21,13 +22,14 @@ Shader "Unlit/Oscilloscope"
             #pragma fragment frag
 
 
-            #define LEN 100
+            #define LEN 256
 
             #include "UnityCG.cginc"
 
             #include "./Solver.hlsl"
 
-            uint _Row;
+            uint _Row1;
+            uint _Row2;
             float _YScale;
             float4 _MainColor;
             float _XScale;
@@ -58,15 +60,17 @@ Shader "Unlit/Oscilloscope"
             [maxvertexcount(LEN)]
             void geom(point v2g input[1], uint ind : SV_PrimitiveID, inout LineStream<g2f> stream)
             {
-                g2f o;
-                o.vertex = float4(0, 0, 0, 1);
-                float time = 0;
-                for(uint i=0;i<LEN;i++){
-                    o.vertex = UnityObjectToClipPos(float4(0.5+time/_XScale, get_data(i, _Row) * _YScale, 0, 1));
-                    time = time - get_data_i_data_im1_timestep(i);
-                    stream.Append(o);
+                if(ind < 2){
+                    g2f o;
+                    o.vertex = float4(0, 0, 0, 1);
+                    float time = 0;
+                    for(uint i=0;i<LEN;i++){
+                        o.vertex = UnityObjectToClipPos(float4(0.5+time * 0.1 * _XScale, get_data(i, (ind == 0) ? _Row1 : _Row2) * _YScale, 0, 1));
+                        time = time - get_data_i_data_im1_timestep(i);
+                        stream.Append(o);
+                    }
+                    stream.RestartStrip();
                 }
-                stream.RestartStrip();
             }
 
             fixed4 frag (g2f i) : SV_Target

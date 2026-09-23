@@ -12,14 +12,16 @@ using static BestHTTP.SecureProtocol.Org.BouncyCastle.Math.EC.ECCurve;
 public class Test : UdonSharpBehaviour
 {
     [SerializeField] TMP_InputField netlistfield;
-    [SerializeField] TMP_InputField probefield;
+    [SerializeField] TMP_InputField probefield1;
+    [SerializeField] TMP_InputField probefield2;
     [SerializeField] TMP_InputField yscalefield;
     [SerializeField] TMP_InputField xscalefield;
     [SerializeField] TMP_InputField stepsPerFrame;
     [SerializeField] TMP_InputField maxError;
     private MNAGen generator;
     private MNASolve solver;
-    private int oscind = -1; //oscilloscope index
+    private int oscind1 = -1; //oscilloscope index
+    private int oscind2 = -1; //oscilloscope index
 
     void Start()
     {
@@ -28,12 +30,21 @@ public class Test : UdonSharpBehaviour
     }
 
     void Update() {
-        if (oscind != solver.label2bufferRow(probefield.text)) { //if changed
-            oscind = solver.label2bufferRow(probefield.text);
-            if (oscind >= 0)
+        if (oscind1 != solver.label2bufferRow(probefield1.text)) { //if changed
+            oscind1 = solver.label2bufferRow(probefield1.text);
+            if (oscind1 >= 0)
             {
-                this.GetComponent<Renderer>().material.SetInteger("_Row", oscind);
-                Debug.Log("osc ind : " + oscind);
+                this.GetComponent<Renderer>().material.SetInteger("_Row1", oscind1);
+                Debug.Log("osc ind : " + oscind1);
+            }
+        }
+        if (oscind2 != solver.label2bufferRow(probefield2.text))
+        { //if changed
+            oscind2 = solver.label2bufferRow(probefield2.text);
+            if (oscind2 >= 0)
+            {
+                this.GetComponent<Renderer>().material.SetInteger("_Row2", oscind2);
+                Debug.Log("osc ind : " + oscind2);
             }
         }
         float ydiv = 1;

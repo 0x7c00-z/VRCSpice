@@ -182,7 +182,7 @@ MonoBehaviour:
   m_OnCullStateChanged:
     m_PersistentCalls:
       m_Calls: []
-  m_text: "1\u200B"
+  m_text: "5e-4\u200B"
   m_isRightToLeft: 0
   m_fontAsset: {fileID: 11400000, guid: 8f586378b4e144a9851e7b34d9b748ee, type: 2}
   m_sharedMaterial: {fileID: 2180264, guid: 8f586378b4e144a9851e7b34d9b748ee, type: 2}
@@ -622,7 +622,7 @@ MonoBehaviour:
   m_CaretColor: {r: 0.19607843, g: 0.19607843, b: 0.19607843, a: 1}
   m_CustomCaretColor: 0
   m_SelectionColor: {r: 0.65882355, g: 0.80784315, b: 1, a: 0.7529412}
-  m_Text: 1
+  m_Text: 5e-4
   m_CaretBlinkRate: 0.85
   m_CaretWidth: 1
   m_ReadOnly: 0
@@ -6699,71 +6699,71 @@ MonoBehaviour:
   m_SelectionColor: {r: 0.65882355, g: 0.80784315, b: 1, a: 0.7529412}
   m_Text: '*LRC circuit with clipping diode
 
-    V1 v1 gnd 10
+    *V1 v1 gnd 10
 
-    R1 v1 v2 1
+    *R1 v1 v2 1
 
-    L1
+    *L1
     v2 v3 10e-3
 
-    C1 v3 gnd 1e-3
+    *C1 v3 gnd 1e-3
 
-    D1 v3 v1 1.0e-14 0.026
+    *D1 v3 v1 1.0e-14 0.026
 
 
-    *BJT test circuit
+    *BJT test
+    circuit
 
-    *V1
-    v1 gnd 3
+    *V1 v1 gnd 3
 
     *R1 v1 v2 100e3
 
     *R2 v1 v3 100
 
-    *Q1 v3 v2 gnd
+    *Q1 v3
+    v2 gnd
 
 
     *multivibrator
 
-    *V1
-    v1 gnd 5
+    V1 v1 gnd 5
 
-    *R1 v1 v2 4.7e3
+    R1 v1 v2 4.7e3
 
-    *R2 v1 v3 100e3
+    R2 v1 v3
+    100e3
 
-    *R3 v1 v4 101e3
+    R3 v1 v4 101e3
 
-    *R4
-    v1 v5 4.7e3
+    R4 v1 v5 4.7e3
 
-    *C1 v2 v3 0.068e-6
+    C1 v2 v3 0.068e-6
 
-    *C2 v4 v5 0.068e-6
+    C2
+    v4 v5 0.068e-6
 
-    *Q1 v2 v4 gnd
+    Q1 v2 v4 gnd
 
-    *Q2
-    v5 v3 gnd
+    Q2 v5 v3 gnd
 
 
     *LC resonator
 
-    *V1 v1 gnd 5
+    *V1
+    v1 gnd 5
 
     *R1 v1 v2 10e3
 
-    *R2
-    v1 v3 11e3
+    *R2 v1 v3 11e3
 
     *C1 v2 v3 10e-6
 
-    *L1 v2 v3 1e-3
+    *L1
+    v2 v3 1e-3
 
     *R1 v2 v3 1e6
 
-    *Q1
-    v2 v3 gnd
+    *Q1 v2 v3 gnd
 
     *Q2 v3 v2 gnd'
   m_CaretBlinkRate: 0.85
@@ -7482,13 +7482,13 @@ MonoBehaviour:
   m_OnCullStateChanged:
     m_PersistentCalls:
       m_Calls: []
-  m_text: "*LRC circuit with clipping diode\nV1 v1 gnd 10\nR1 v1 v2 1\nL1 v2 v3 10e-3\nC1
-    v3 gnd 1e-3\nD1 v3 v1 1.0e-14 0.026\n\n*BJT test circuit\n*V1 v1 gnd 3\n*R1 v1
-    v2 100e3\n*R2 v1 v3 100\n*Q1 v3 v2 gnd\n\n*multivibrator\n*V1 v1 gnd 5\n*R1 v1
-    v2 4.7e3\n*R2 v1 v3 100e3\n*R3 v1 v4 101e3\n*R4 v1 v5 4.7e3\n*C1 v2 v3 0.068e-6\n*C2
-    v4 v5 0.068e-6\n*Q1 v2 v4 gnd\n*Q2 v5 v3 gnd\n\n*LC resonator\n*V1 v1 gnd 5\n*R1
-    v1 v2 10e3\n*R2 v1 v3 11e3\n*C1 v2 v3 10e-6\n*L1 v2 v3 1e-3\n*R1 v2 v3 1e6\n*Q1
-    v2 v3 gnd\n*Q2 v3 v2 gnd\u200B"
+  m_text: "*LRC circuit with clipping diode\n*V1 v1 gnd 10\n*R1 v1 v2 1\n*L1 v2 v3
+    10e-3\n*C1 v3 gnd 1e-3\n*D1 v3 v1 1.0e-14 0.026\n\n*BJT test circuit\n*V1 v1
+    gnd 3\n*R1 v1 v2 100e3\n*R2 v1 v3 100\n*Q1 v3 v2 gnd\n\n*multivibrator\nV1 v1
+    gnd 5\nR1 v1 v2 4.7e3\nR2 v1 v3 100e3\nR3 v1 v4 101e3\nR4 v1 v5 4.7e3\nC1 v2
+    v3 0.068e-6\nC2 v4 v5 0.068e-6\nQ1 v2 v4 gnd\nQ2 v5 v3 gnd\n\n*LC resonator\n*V1
+    v1 gnd 5\n*R1 v1 v2 10e3\n*R2 v1 v3 11e3\n*C1 v2 v3 10e-6\n*L1 v2 v3 1e-3\n*R1
+    v2 v3 1e6\n*Q1 v2 v3 gnd\n*Q2 v3 v2 gnd\u200B"
   m_isRightToLeft: 0
   m_fontAsset: {fileID: 11400000, guid: 8f586378b4e144a9851e7b34d9b748ee, type: 2}
   m_sharedMaterial: {fileID: 2180264, guid: 8f586378b4e144a9851e7b34d9b748ee, type: 2}

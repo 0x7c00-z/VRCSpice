@@ -22,10 +22,10 @@ public class MNASolve : UdonSharpBehaviour
 
     bool outputBuffer0 = false;//For double buffering
     private int stepperframe = 100;
-    private float deltatime = 0.0001f;
+    private float deltatime = 1e-9f;
     private float maxPCError = 0.05f;
     bool initialized = false;
-    const int buflen = 100;
+    const int buflen = 256;
 
     //DEBUG
     [SerializeField] private bool stepexecution = false;

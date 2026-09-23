@@ -133,71 +133,125 @@ public class MNAGen : UdonSharpBehaviour
             else if (comp_name.StartsWith("Q"))//Q1 vc vb ve
             {
                 float VT = 0.0259f;
-                //KSC1815 Gummel poon model
-                //See https://fscdn.rohm.com/jp/products/databook/applinote/discrete/transistor/overview_of_rohms_simulation_models_for_bipolar_transistors_an-j.pdf
-                //Model from onsemi.com
+                // NPN, terminal order C B E [S]; S defaults to GND (ROHM Figure 2).
+                // Topology: https://fscdn.rohm.com/jp/products/databook/applinote/discrete/transistor/overview_of_rohms_simulation_models_for_bipolar_transistors_an-j.pdf
+                // KSC1815: https://www.onsemi.com/pub/Collateral/KSC1815.lib
+                // Fixed temperature, fixed RB and TF; no excess-phase or breakdown model.
                 float IS = 2.04174E-14f;
                 float BF = 127.6f;
-                float NF = 1;
+                float NF = 1.0f;
                 float BR = 4.595f;
-                float NR = 1;
+                float NR = 1.0f;
                 float ISE = 1.20226E-14f;
                 float NE = 1.5f;
                 float ISC = 1.31826E-13f;
                 float NC = 1.5f;
-                float RB = 34;
+                float VAF = 121.25f;
+                float VAR = 24.03f;
+                float IKF = 1.13f;
+                float IKR = 0.793f;
+                float NK = 0.853f; // 0.5 selects the standard square-root base-charge law.
+                float RB = 34.0f;
                 float RE = 0.38f;
                 float RC = 7.7f;
+                float CJE = 2.041E-11f;
+                float VJE = 0.692258f;
+                float MJE = 0.315545f;
+                float CJC = 6.29422E-12f;
+                float VJC = 0.410107f;
+                float MJC = 0.247613f;
+                float XCJC = 0.45f;
+                float FC = 0.5f;
+                float TF = 1.99E-9f;
+                // Not specified by KSC1815: retain SPICE defaults, with editable parameters.
+                float TR = 0.0f;
+                float CJS = 0.0f;
+                float VJS = 0.75f;
+                float MJS = 0.0f;
 
-                //I_0~I_6 refers to Ibc Ibe Iec Icc Vc Vb Ve
-                string net_Vc = "I_" + comp_name + "_4";
-                string net_Vb = "I_" + comp_name + "_5";
-                string net_Ve = "I_" + comp_name + "_6";
+                // I_0 = intrinsic Ic, I_1 = intrinsic Ib, I_2 = CJX current B -> C',
+                // I_3 = CCS current S -> C'; slots I_4..I_6 hold voltages C', B', E'.
+                string prefix = "I_" + comp_name + "_";
+                string[] externalNodes = new string[] { (string)nets[0], (string)nets[1], (string)nets[2] };
+                string[] internalNodes = new string[] { prefix + "4", prefix + "5", prefix + "6" };
+                float[] resistances = new float[] { RC, RB, RE };
+                string[] coreNodes = new string[3];
+                for (int terminal = 0; terminal < 3; terminal++)
+                {
+                    if (resistances[terminal] > 0.0f)
+                    {
+                        coreNodes[terminal] = internalNodes[terminal];
+                        float conductance = 1.0f / resistances[terminal];
+                        solver.WriteCircuit(externalNodes[terminal], externalNodes[terminal], "A", conductance);
+                        solver.WriteCircuit(externalNodes[terminal], internalNodes[terminal], "A", -conductance);
+                        solver.WriteCircuit(internalNodes[terminal], externalNodes[terminal], "A", -conductance);
+                        solver.WriteCircuit(internalNodes[terminal], internalNodes[terminal], "A", conductance);
+                    }
+                    else
+                    {
+                        // A zero series resistance aliases the external node; fix the unused slot.
+                        coreNodes[terminal] = externalNodes[terminal];
+                        solver.WriteCircuit(internalNodes[terminal], internalNodes[terminal], "A", 1.0f);
+                    }
+                }
 
-                solver.WriteCircuit((string)nets[0], (string)nets[0], "A", 1/RC);
-                solver.WriteCircuit((string)nets[0], net_Vc, "A", -1/RC);
-                solver.WriteCircuit(net_Vc, (string)nets[0], "A", -1/RC);
-                solver.WriteCircuit(net_Vc, net_Vc, "A", 1/RC);
+                int cIndex = solver.label2bufferRow(coreNodes[0]);
+                int bIndex = solver.label2bufferRow(coreNodes[1]);
+                int eIndex = solver.label2bufferRow(coreNodes[2]);
+                uint[] bjtData = new uint[28];
+                // case 2: [1] 0=Ic / 1=Ib, [2..4] C'/B'/E' indices, [5..27] parameters.
+                bjtData[0] = 2u;
+                bjtData[2] = cIndex < 0 ? uint.MaxValue : (uint)cIndex;
+                bjtData[3] = bIndex < 0 ? uint.MaxValue : (uint)bIndex;
+                bjtData[4] = eIndex < 0 ? uint.MaxValue : (uint)eIndex;
+                float[] bjtParameters = new float[]
+                {
+                    IS, 1.0f / BF, 1.0f / (NF * VT), 1.0f / BR, 1.0f / (NR * VT),
+                    ISE, 1.0f / (NE * VT), ISC, 1.0f / (NC * VT),
+                    VAF > 0.0f ? 1.0f / VAF : 0.0f, VAR > 0.0f ? 1.0f / VAR : 0.0f,
+                    IKF > 0.0f ? 1.0f / IKF : 0.0f, IKR > 0.0f ? 1.0f / IKR : 0.0f,
+                    CJE, VJE, MJE, CJC * XCJC, VJC, MJC, FC, TF, TR, NK
+                };
+                for (int parameter = 0; parameter < bjtParameters.Length; parameter++)
+                    bjtData[parameter + 5] = BitConverter.ToUInt32(BitConverter.GetBytes(bjtParameters[parameter]), 0);
 
-                solver.WriteCircuit((string)nets[1], (string)nets[1], "A", 1 / RB);
-                solver.WriteCircuit((string)nets[1], net_Vb, "A", -1 / RB);
-                solver.WriteCircuit(net_Vb, (string)nets[1], "A", -1 / RB);
-                solver.WriteCircuit(net_Vb, net_Vb, "A", 1 / RB);
+                for (int branch = 0; branch < 2; branch++)
+                {
+                    string current = prefix + branch.ToString();
+                    bjtData[1] = (uint)branch;
+                    solver.WriteNonLinerCircuit(current, bjtData);
+                    solver.WriteCircuit(current, current, "A", -1.0f);
+                    solver.WriteCircuit(coreNodes[branch], current, "A", 1.0f);
+                    solver.WriteCircuit(coreNodes[2], current, "A", -1.0f);
+                }
 
-                solver.WriteCircuit((string)nets[2], (string)nets[2], "A", 1 / RE);
-                solver.WriteCircuit((string)nets[2], net_Ve, "A", -1 / RE);
-                solver.WriteCircuit(net_Ve, (string)nets[2], "A", -1 / RE);
-                solver.WriteCircuit(net_Ve, net_Ve, "A", 1 / RE);
-
-                solver.WriteCircuit("I_" + comp_name + "_0", net_Vb, "C", 1.0f / VT / NC);
-                solver.WriteCircuit("I_" + comp_name + "_0", net_Vc, "C", -1.0f / VT / NC);
-                solver.WriteCircuit("I_" + comp_name + "_0", "", "Is", ISC);
-                solver.WriteCircuit("I_" + comp_name + "_0", "I_" + comp_name + "_0", "A", -1.0f);
-                solver.WriteCircuit(net_Vb, "I_" + comp_name + "_0", "A", 1.0f);
-                solver.WriteCircuit(net_Vc, "I_" + comp_name + "_0", "A", -1.0f);
-
-                solver.WriteCircuit("I_" + comp_name + "_1", net_Vb, "C", 1.0f / VT / NE);
-                solver.WriteCircuit("I_" + comp_name + "_1", net_Ve, "C", -1.0f / VT / NE);
-                solver.WriteCircuit("I_" + comp_name + "_1", "", "Is", ISE);
-                solver.WriteCircuit("I_" + comp_name + "_1", "I_" + comp_name + "_1", "A", -1.0f);
-                solver.WriteCircuit(net_Vb, "I_" + comp_name + "_1", "A", 1.0f);
-                solver.WriteCircuit(net_Ve, "I_" + comp_name + "_1", "A", -1.0f);
-
-                solver.WriteCircuit("I_" + comp_name + "_2", net_Vb, "C", 1.0f / VT / NR);
-                solver.WriteCircuit("I_" + comp_name + "_2", net_Vc, "C", -1.0f / VT / NR);
-                solver.WriteCircuit("I_" + comp_name + "_2", "", "Is", IS);
-                solver.WriteCircuit("I_" + comp_name + "_2", "I_" + comp_name + "_2", "A", -1.0f);
-                solver.WriteCircuit(net_Vb, "I_" + comp_name + "_2", "A", 1.0f / BR);
-                solver.WriteCircuit(net_Vc, "I_" + comp_name + "_2", "A", -1.0f - 1.0f / BR);
-                solver.WriteCircuit(net_Ve, "I_" + comp_name + "_2", "A", 1.0f);
-
-                solver.WriteCircuit("I_" + comp_name + "_3", net_Vb, "C", 1.0f / VT / NF);
-                solver.WriteCircuit("I_" + comp_name + "_3", net_Ve, "C", -1.0f / VT / NF);
-                solver.WriteCircuit("I_" + comp_name + "_3", "", "Is", IS);
-                solver.WriteCircuit("I_" + comp_name + "_3", "I_" + comp_name + "_3", "A", -1.0f);
-                solver.WriteCircuit(net_Vb, "I_" + comp_name + "_3", "A", 1.0f / BF);
-                solver.WriteCircuit(net_Ve, "I_" + comp_name + "_3", "A", -1.0f - 1.0f / BF);
-                solver.WriteCircuit(net_Vc, "I_" + comp_name + "_3", "A", 1.0f);
+                // CJX connects the external base to C', bypassing RB. CCS uses Vs - Vc'.
+                string substrate = nets.Count > 3 ? (string)nets[3] : "GND";
+                string[] capPositiveNodes = new string[] { externalNodes[1], substrate };
+                float[] capValues = new float[] { CJC * (1.0f - XCJC), CJS };
+                float[] capPotentials = new float[] { VJC, VJS };
+                float[] capExponents = new float[] { MJC, MJS };
+                float[] capCutoffs = new float[] { FC, 0.0f };
+                for (int branch = 0; branch < 2; branch++)
+                {
+                    string current = prefix + (branch + 2).ToString();
+                    int positiveIndex = solver.label2bufferRow(capPositiveNodes[branch]);
+                    // case 3: [1..2] positive/negative indices, [3..6] C0, VJ, M, FC.
+                    uint[] capData = new uint[]
+                    {
+                        3u,
+                        positiveIndex < 0 ? uint.MaxValue : (uint)positiveIndex,
+                        cIndex < 0 ? uint.MaxValue : (uint)cIndex,
+                        BitConverter.ToUInt32(BitConverter.GetBytes(capValues[branch]), 0),
+                        BitConverter.ToUInt32(BitConverter.GetBytes(capPotentials[branch]), 0),
+                        BitConverter.ToUInt32(BitConverter.GetBytes(capExponents[branch]), 0),
+                        BitConverter.ToUInt32(BitConverter.GetBytes(capCutoffs[branch]), 0)
+                    };
+                    solver.WriteNonLinerCircuit(current, capData);
+                    solver.WriteCircuit(current, current, "A", -1.0f);
+                    solver.WriteCircuit(capPositiveNodes[branch], current, "A", 1.0f);
+                    solver.WriteCircuit(coreNodes[0], current, "A", -1.0f);
+                }
             }
             else if (comp_name.StartsWith("I")) {
                 float j = (float)consts[0];
