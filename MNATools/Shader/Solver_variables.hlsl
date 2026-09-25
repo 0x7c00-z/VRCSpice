@@ -3,6 +3,7 @@
 
 uint _DATA_N; //size of the vector to be solved
 float _DeltaTime; //initial time step
+float _MaxDeltaTime;
 float _MaxPCError;
 
 // R32_UInt storage: control fields are native uint; numerical fields hold float bits.

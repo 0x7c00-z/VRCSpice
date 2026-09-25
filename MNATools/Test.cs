@@ -11,7 +11,7 @@ using static BestHTTP.SecureProtocol.Org.BouncyCastle.Math.EC.ECCurve;
 
 public class Test : UdonSharpBehaviour
 {
-    [SerializeField] TMP_InputField netlistfield;
+    //[SerializeField] TMP_InputField netlistfield;
     [SerializeField] TMP_InputField probefield1;
     [SerializeField] TMP_InputField probefield2;
     [SerializeField] TMP_InputField yscalefield;
@@ -20,8 +20,8 @@ public class Test : UdonSharpBehaviour
     [SerializeField] TMP_InputField maxError;
     private MNAGen generator;
     private MNASolve solver;
-    private int oscind1 = -1; //oscilloscope index
-    private int oscind2 = -1; //oscilloscope index
+    private int oscind1 = int.MinValue; // -1: hidden, -2: GND, >=0: buffer row
+    private int oscind2 = int.MinValue;
 
     void Start()
     {
@@ -30,22 +30,18 @@ public class Test : UdonSharpBehaviour
     }
 
     void Update() {
-        if (oscind1 != solver.label2bufferRow(probefield1.text)) { //if changed
-            oscind1 = solver.label2bufferRow(probefield1.text);
-            if (oscind1 >= 0)
-            {
-                this.GetComponent<Renderer>().material.SetInteger("_Row1", oscind1);
-                Debug.Log("osc ind : " + oscind1);
-            }
+        int next1 = probefield1.text == "GND" ? -2 : solver.label2bufferRow(probefield1.text);
+        int next2 = probefield2.text == "GND" ? -2 : solver.label2bufferRow(probefield2.text);
+        if (oscind1 != next1) { //if changed
+            oscind1 = next1;
+            this.GetComponent<Renderer>().material.SetInteger("_Row1", oscind1);
+            Debug.Log("osc ind : " + oscind1);
         }
-        if (oscind2 != solver.label2bufferRow(probefield2.text))
+        if (oscind2 != next2)
         { //if changed
-            oscind2 = solver.label2bufferRow(probefield2.text);
-            if (oscind2 >= 0)
-            {
-                this.GetComponent<Renderer>().material.SetInteger("_Row2", oscind2);
-                Debug.Log("osc ind : " + oscind2);
-            }
+            oscind2 = next2;
+            this.GetComponent<Renderer>().material.SetInteger("_Row2", oscind2);
+            Debug.Log("osc ind : " + oscind2);
         }
         float ydiv = 1;
         float xdiv = 1;
@@ -59,6 +55,7 @@ public class Test : UdonSharpBehaviour
         if (xdiv > 0)
         {
             this.GetComponent<Renderer>().material.SetFloat("_XScale", 0.1f / xdiv);
+            solver.SetMaxDeltaTime(xdiv);
         }
 
         int steps = 100;
@@ -71,7 +68,7 @@ public class Test : UdonSharpBehaviour
         }
     }
 
-    public void restart() {
+    /*public void restart() {
         //split into lines
         string[] lines = netlistfield.text.Split("\n");
         generator.netlist.Clear();
@@ -139,5 +136,5 @@ public class Test : UdonSharpBehaviour
         }
 
         generator.UpdateMNA();
-    }
+    }*/
 }

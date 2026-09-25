@@ -13,6 +13,7 @@ Shader "Unlit/Processor"
         _Is ("Is", 2D) = "black" {}
         _rhs ("rhs", 2D) = "black" {}
         _DeltaTime ("Delta time", Float) = 0.01
+        _MaxDeltaTime ("Maximum Delta time", Float) = 0.01
         _MaxPCError ("Maximum Predictor-Corrector Error", Float) = 0.05
         _MainTex ("Texture", 2D) = "black" {}
     }

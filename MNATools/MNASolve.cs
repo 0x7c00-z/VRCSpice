@@ -24,6 +24,7 @@ public class MNASolve : UdonSharpBehaviour
     private int stepperframe = 100;
     private float deltatime = 1e-9f;
     private float maxPCError = 0.05f;
+    private float maxdeltatime = 0.01f;
     bool initialized = false;
     const int buflen = 256;
 
@@ -46,6 +47,7 @@ public class MNASolve : UdonSharpBehaviour
     {
         processor.SetFloat("_DeltaTime", deltatime);
         processor.SetFloat("_MaxPCError", maxPCError);
+        processor.SetFloat("_MaxDeltaTime", maxdeltatime);
         if(initialized && (!stepexecution || EXECUTE)) {
             Process();
             EXECUTE = false;
@@ -61,6 +63,11 @@ public class MNASolve : UdonSharpBehaviour
         maxPCError = err;
     }
 
+    public void SetMaxDeltaTime(float ts)
+    {
+        maxdeltatime = ts;
+    }
+    
     public int label2bufferRow(string label)
     {
         return veclabels.IndexOf(label);

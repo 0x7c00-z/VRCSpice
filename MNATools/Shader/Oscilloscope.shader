@@ -28,8 +28,8 @@ Shader "Unlit/Oscilloscope"
 
             #include "./Solver.hlsl"
 
-            uint _Row1;
-            uint _Row2;
+            int _Row1;
+            int _Row2;
             float _YScale;
             float4 _MainColor;
             float _XScale;
@@ -61,11 +61,15 @@ Shader "Unlit/Oscilloscope"
             void geom(point v2g input[1], uint ind : SV_PrimitiveID, inout LineStream<g2f> stream)
             {
                 if(ind < 2){
+                    int row = ind == 0 ? _Row1 : _Row2;
+                    if(row == -1 || row < -2 || row >= (int)_DATA_N) return;
                     g2f o;
                     o.vertex = float4(0, 0, 0, 1);
                     float time = 0;
                     for(uint i=0;i<LEN;i++){
-                        o.vertex = UnityObjectToClipPos(float4(0.5+time * 0.1 * _XScale, get_data(i, (ind == 0) ? _Row1 : _Row2) * _YScale, 0, 1));
+                        float voltage = 0;
+                        if(row >= 0) voltage = get_data(i, (uint)row);
+                        o.vertex = UnityObjectToClipPos(float4(0.5+time * 0.1 * _XScale, voltage * _YScale, 0, 1));
                         time = time - get_data_i_data_im1_timestep(i);
                         stream.Append(o);
                     }
