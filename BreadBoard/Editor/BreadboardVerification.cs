@@ -149,6 +149,30 @@ public static class BreadboardVerification
             Check(sync.MatchesAcknowledgement(2, handoffRevision, 12), "later handoff accepts its own ACK");
             sync.hasState = false;
             Check(!sync.MatchesAcknowledgement(2, handoffRevision, 12), "missing initial state blocks handoff");
+            // Reproduce a remote observation update at an unchanged circuit revision.
+            var receiver = go.AddUdonSharpComponent<BreadboardController>(); receiver.probes = probes;
+            sync.controller = receiver; sync.hasState = true; sync.snapshot = codec.Encode();
+            adapter.appliedRevision = state.revision;
+            sync.probe1Hole = layout.holeIds[300]; sync.probe2Hole = layout.holeIds[325]; sync.probeRevision = 1;
+            sync.ReceiveSnapshot();
+            Check(probes.channel1Hole == layout.holeIds[300] && probes.channel2Hole == layout.holeIds[325], "remote probe pair applies without circuit edit");
+            Check(probes.marker1.gameObject.activeSelf && probes.marker2.gameObject.activeSelf && probes.channel2Input.text == "GND", "remote markers and scope inputs update");
+            Check(state.revision == handoffRevision && adapter.appliedRevision == handoffRevision, "probe reception does not rebuild circuit or MNA");
+            sync.probe1Hole = ""; sync.probeRevision = 2; sync.ReceiveSnapshot();
+            Check(probes.channel1Input.text == "" && !probes.marker1.gameObject.activeSelf && probes.channel2Input.text == "GND", "remote clear hides only selected channel");
+            sync.probe1Hole = layout.holeIds[300]; sync.probeRevision = 1; sync.ReceiveSnapshot();
+            Check(probes.channel1Hole == "", "old probe packet cannot restore cleared channel");
+            sync.probeRevision = 3; sync.probe2Hole = "missing-hole"; sync.ReceiveSnapshot();
+            Check(probes.channel1Hole == "" && probes.channel2Hole == layout.holeIds[325], "invalid probe pair rejected atomically");
+            sync.probeRevision = 2; sync.probe2Hole = layout.holeIds[325]; sync.ReceiveSnapshot();
+            Check(probes.channel1Hole == "", "conflicting same probe revision rejected");
+            sync.probeRevision = 3; sync.ReceiveSnapshot();
+            Check(probes.channel1Hole == layout.holeIds[300], "valid newer probe pair recovers after rejection");
+            sync.ReceiveSnapshot();
+            Check(probes.channel2Input.text == "GND" && state.revision == handoffRevision, "duplicate observation snapshot is idempotent");
+            SyncField(sync, "pendingProbe1", layout.holeIds[300]); SyncField(sync, "pendingProbe2", "");
+            SyncField(sync, "pendingProbeRevision", 4); sync.OnPreSerialization();
+            Check(sync.probe1Hole == layout.holeIds[300] && sync.probe2Hole == "" && sync.probeRevision == 4, "both probe channels captured with circuit serialization");
             Debug.Log("Breadboard verification PASSED: " + checks + " assertions.");
         }
         finally { Object.DestroyImmediate(go); }

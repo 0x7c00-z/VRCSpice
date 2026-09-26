@@ -11,7 +11,7 @@ using static BestHTTP.SecureProtocol.Org.BouncyCastle.Math.EC.ECCurve;
 
 public class Test : UdonSharpBehaviour
 {
-    //[SerializeField] TMP_InputField netlistfield;
+    [SerializeField] TMP_InputField netlistfield;
     [SerializeField] TMP_InputField probefield1;
     [SerializeField] TMP_InputField probefield2;
     [SerializeField] TMP_InputField yscalefield;
@@ -68,8 +68,9 @@ public class Test : UdonSharpBehaviour
         }
     }
 
-    /*public void restart() {
+    public void restart() {
         //split into lines
+        if (!netlistfield) return;
         string[] lines = netlistfield.text.Split("\n");
         generator.netlist.Clear();
 
@@ -136,5 +137,5 @@ public class Test : UdonSharpBehaviour
         }
 
         generator.UpdateMNA();
-    }*/
+    }
 }

@@ -164,30 +164,54 @@ public class MNASolve : UdonSharpBehaviour
         buffer1 = CreateSolverBuffer(width, height);
         tmpbuffer = CreateSolverBuffer(width, height);
 
-        //copy old buffer to new buffer
-        Texture2D indexerbuf = new Texture2D(width, 1, TextureFormat.RFloat, false);
-        for (int i = 0; i < newmatrixsize; i++)
+        // Map destination columns to the previous circuit using packed uint indices.
+        // RG32 stores the low 16 bits in R and the high 16 bits in G.
+        Texture2D indexerbuf = new Texture2D(width, 1, TextureFormat.RG32, false, true);
+        byte[] indexerBytes = new byte[width * 4];
+        for (int i = 0; i < width; i++)
         {
-            indexerbuf.SetPixel(i, 0, new Color(veclabels.IndexOf((string)newlabel[i]), 0, 0));
+            int oldIndex = -1;
+            if (i < newmatrixsize)
+            {
+                oldIndex = veclabels.IndexOf((string)newlabel[i]);
+            }
+            else if (i == newmatrixsize && matrixsize > 0)
+            {
+                // The extra column contains the accepted time-step history.
+                oldIndex = matrixsize;
+            }
+            uint value = oldIndex < 0 ? uint.MaxValue : (uint)oldIndex;
+            int offset = i * 4;
+            indexerBytes[offset] = (byte)(value & 0xffu);
+            indexerBytes[offset + 1] = (byte)((value >> 8) & 0xffu);
+            indexerBytes[offset + 2] = (byte)((value >> 16) & 0xffu);
+            indexerBytes[offset + 3] = (byte)((value >> 24) & 0xffu);
         }
-        for(int i = newmatrixsize; i < width; i++)
-        {
-            indexerbuf.SetPixel(i, 0, new Color(-1, 0, 0));
-        }
-
-        // Preserve the time-step column alongside the remapped solution history.
-        indexerbuf.SetPixel(newmatrixsize, 0, new Color(matrixsize > 0 ? matrixsize : -1, 0, 0));
         indexerbuf.filterMode = FilterMode.Point;
         indexerbuf.wrapMode = TextureWrapMode.Clamp;
-        indexerbuf.Apply();
-        
+        indexerbuf.LoadRawTextureData(indexerBytes);
+        indexerbuf.Apply(false, false);
+
         CopyColumn.SetTexture("_IndexMat", indexerbuf);
         CopyColumn.SetInteger("_DstMatSize", newmatrixsize);
         CopyColumn.SetInteger("_SrcMatSize", matrixsize);
         CopyColumn.SetInteger("_DstTexHeight", height);
 
-        VRCGraphics.Blit(this.buffer0, buffer0, CopyColumn);
-        VRCGraphics.Blit(this.buffer1, buffer1, CopyColumn);
+        // Both new buffers start from the latest snapshot, whichever side is current.
+        RenderTexture currentBuffer = outputBuffer0 ? this.buffer0 : this.buffer1;
+        VRCGraphics.Blit(currentBuffer, buffer0, CopyColumn);
+        VRCGraphics.Blit(currentBuffer, buffer1, CopyColumn);
+        Destroy(indexerbuf);
+
+        // Destroy is deferred until the end of the frame, after the copies above.
+        if (this.buffer0 != null) Destroy(this.buffer0);
+        if (this.buffer1 != null) Destroy(this.buffer1);
+        if (this.tmpbuffer != null) Destroy(this.tmpbuffer);
+        if (A != null) Destroy(A);
+        if (B != null) Destroy(B);
+        if (C != null) Destroy(C);
+        if (rhs != null) Destroy(rhs);
+        if (Is != null) Destroy(Is);
 
         //replace old buffer with new buffer
         this.buffer0 = buffer0;
@@ -224,7 +248,12 @@ public class MNASolve : UdonSharpBehaviour
         Is.Apply();
 
         matrixsize = newmatrixsize;
-        veclabels = newlabel;
+        // MNAGen clears and rebuilds its list on the next update; keep our own snapshot.
+        veclabels = newlabel.ShallowClone();
+        for (int i = 0; i < outputMaterial.Length; i++)
+        {
+            WriteToMaterial(outputMaterial[i]);
+        }
         initialized = true;
     }
 

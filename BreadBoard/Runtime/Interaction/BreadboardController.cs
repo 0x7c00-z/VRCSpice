@@ -196,7 +196,7 @@ public class BreadboardController : UdonSharpBehaviour
         if (candidateHole < 0) return;
         if (palette.mode >= 3)
         {
-            probes.Select(palette.mode-3,candidateHole); palette.Refresh();
+            circuitSync.SetProbe(palette.mode-3,candidateHole); palette.Refresh();
             ShowFeedback(probes.Label(palette.mode-3)); return;
         }
         // Commit exactly the previewed anchor, not a newly sampled unseen hole.

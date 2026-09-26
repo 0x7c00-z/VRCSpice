@@ -142,7 +142,7 @@ public class BreadboardPalette : UdonSharpBehaviour
             else if (index == 9 || index == 10)
             { wireLength = Mathf.Clamp(wireLength + (index == 9 ? -1 : 1),1,30); if (selectedId > 0) controller.EditSelected(true); }
             else if (index == 12 || index == 13) { mode = index-9; selectedId = 0; controller.CancelWire(); }
-            else if ((index == 14 || index == 15) && controller.probes != null) controller.probes.Clear(index-14);
+            else if ((index == 14 || index == 15) && controller.probes != null) controller.circuitSync.SetProbe(index-14,-1);
         }
         Refresh();
     }

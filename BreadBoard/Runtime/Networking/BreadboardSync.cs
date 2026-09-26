@@ -17,6 +17,12 @@ public class BreadboardSync : UdonSharpBehaviour
     [UdonSynced] public int grantedPlayerId = -1;
     [UdonSynced] public int grantedRevision;
     [UdonSynced] public int grantToken;
+    [UdonSynced] public string probe1Hole = "", probe2Hole = "";
+    [UdonSynced] public int probeRevision;
+    private string pendingProbe1 = "", pendingProbe2 = "", sendingProbe1 = "", sendingProbe2 = "";
+    private string sharedProbe1 = "", sharedProbe2 = "";
+    private int pendingProbeRevision, sendingProbeRevision, sharedProbeRevision;
+    private int appliedProbeRevision = -1;
     [HideInInspector] public bool hasState;
     [HideInInspector] public bool dirty;
     [HideInInspector] public string syncError = "";
@@ -77,6 +83,23 @@ public class BreadboardSync : UdonSharpBehaviour
         if (!CanEdit() || string.IsNullOrEmpty(json)) return false;
         pendingSnapshot = json; pendingGrant = Networking.LocalPlayer.playerId;
         pendingGrantRevision = state.revision; dirty = true; syncError = "";
+        return true;
+    }
+
+    public bool SetProbe(int channel, int hole)
+    {
+        if (!CanEdit() || controller.probes == null || channel < 0 || channel > 1 ||
+            hole < -1 || hole >= state.layout.holeIds.Length) return false;
+        string target = hole < 0 ? "" : state.layout.holeIds[hole];
+        if ((channel == 0 ? pendingProbe1 : pendingProbe2) == target) return true;
+        if (channel == 0) pendingProbe1 = target; else pendingProbe2 = target;
+        pendingProbeRevision++;
+        appliedProbeRevision = pendingProbeRevision;
+        controller.probes.ApplyShared(pendingProbe1, pendingProbe2);
+        // The handoff token covers observations as well as the circuit snapshot.
+        pendingToken++;
+        dirty = true;
+        if (controller.palette != null) controller.palette.Refresh();
         return true;
     }
 
@@ -147,6 +170,8 @@ public class BreadboardSync : UdonSharpBehaviour
     public override void OnPreSerialization()
     {
         if (!hasState || string.IsNullOrEmpty(pendingSnapshot)) return;
+        probe1Hole = pendingProbe1; probe2Hole = pendingProbe2; probeRevision = pendingProbeRevision;
+        sendingProbe1 = probe1Hole; sendingProbe2 = probe2Hole; sendingProbeRevision = probeRevision;
         snapshot = pendingSnapshot; grantedPlayerId = pendingGrant; grantedRevision = pendingGrantRevision; grantToken = pendingToken;
         sendingSnapshot = snapshot; sendingRevision = grantedRevision; sendingGrant = grantedPlayerId; sendingToken = grantToken;
     }
@@ -161,8 +186,9 @@ public class BreadboardSync : UdonSharpBehaviour
         }
         lastSentRevision = sendingRevision; lastSentGrant = sendingGrant; lastSentToken = sendingToken;
         sharedSnapshot = sendingSnapshot;
+        sharedProbe1 = sendingProbe1; sharedProbe2 = sendingProbe2; sharedProbeRevision = sendingProbeRevision;
         // Completion of an older send must not clear a newer edit.
-        dirty = sendingSnapshot != pendingSnapshot || sendingGrant != pendingGrant || sendingToken != pendingToken;
+        dirty = sendingSnapshot != pendingSnapshot || sendingGrant != pendingGrant || sendingToken != pendingToken || sendingProbeRevision != pendingProbeRevision;
         syncError = "";
         VRCPlayerApi local = Networking.LocalPlayer;
         if (Utilities.IsValid(local) && sendingGrant == local.playerId && !dirty)
@@ -177,12 +203,23 @@ public class BreadboardSync : UdonSharpBehaviour
 
     public void ReceiveSnapshot()
     {
+        if (probeRevision < appliedProbeRevision) return;
+        if (probeRevision < 0 || controller == null || controller.probes == null ||
+            !controller.probes.ValidHoles(probe1Hole, probe2Hole))
+        { syncError = "Invalid probe snapshot"; return; }
+        if (probeRevision == appliedProbeRevision &&
+            (probe1Hole != controller.probes.channel1Hole || probe2Hole != controller.probes.channel2Hole))
+        { syncError = "Conflicting probe revision"; return; }
         if (!codec.TryDecode(snapshot)) { syncError = codec.error; return; }
         if (hasState && codec.decodedRevision < state.revision) return;
         bool changed = !hasState || codec.decodedRevision > state.revision;
         if (!changed && !codec.DecodedMatchesState()) { syncError = "Conflicting circuit revision"; return; }
         if (changed) codec.ApplyDecoded();
         sharedSnapshot = snapshot;
+        sharedProbe1 = probe1Hole; sharedProbe2 = probe2Hole; sharedProbeRevision = probeRevision;
+        appliedProbeRevision = probeRevision;
+        controller.probes.ApplyShared(probe1Hole, probe2Hole);
+        if (controller.palette != null) controller.palette.Refresh();
         hasState = true;
         if (state.revision == grantedRevision)
         { acceptedGrant = grantedPlayerId; acceptedToken = grantToken; }
@@ -197,7 +234,10 @@ public class BreadboardSync : UdonSharpBehaviour
         knownOwnerId = Utilities.IsValid(player) ? player.playerId : -1;
         if (dirty && Utilities.IsValid(player) && !player.isLocal && !string.IsNullOrEmpty(sharedSnapshot) && codec.TryDecode(sharedSnapshot))
         {
-            codec.ApplyDecoded(); controller.CircuitChanged();
+            codec.ApplyDecoded();
+            controller.probes.ApplyShared(sharedProbe1, sharedProbe2);
+            appliedProbeRevision = sharedProbeRevision;
+            controller.CircuitChanged();
         }
         dirty = false; pendingSnapshot = null;
         if (Utilities.IsValid(player) && player.isLocal)
@@ -207,6 +247,7 @@ public class BreadboardSync : UdonSharpBehaviour
             // If the previous owner left, RequestControl can publish a new
             // grant from the last shared state after the network has settled.
             pendingSnapshot = hasState ? codec.Encode() : snapshot;
+            pendingProbe1 = sharedProbe1; pendingProbe2 = sharedProbe2; pendingProbeRevision = sharedProbeRevision;
             pendingGrant = grantedPlayerId; pendingGrantRevision = grantedRevision; pendingToken = grantToken;
             lastSentRevision = -1; lastSentGrant = -1; lastSentToken = -1;
         }

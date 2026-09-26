@@ -187,7 +187,8 @@ uint generate_xdot_vector(uint2 pixel)
 
 uint initialize(uint2 pixel)
 {
-    uint result = SolverStoreUInt(0u);
+    // CopyColumn resets control/work rows; keep the accepted history it copied.
+    uint result = SolverLoadUInt(pixel);
     if (!any(pixel - OFFSET_TIME_STEP))
     {
         result = SolverStoreFloat(_DeltaTime);

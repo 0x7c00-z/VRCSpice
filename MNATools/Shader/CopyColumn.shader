@@ -40,8 +40,7 @@ Shader "Unlit/CopyColumn"
                 float4 vertex : SV_POSITION;
             };
 
-            float4 _MainTex_ST;
-            Texture2D<float> _IndexMat; //Numeric column indices; -1 means no previous column.
+            Texture2D<float2> _IndexMat; //RG32 packed uint; 0xffffffff means no previous column.
             float4 _IndexMat_TexelSize;
             int _SrcMatSize;
             int _DstMatSize;
@@ -51,25 +50,37 @@ Shader "Unlit/CopyColumn"
             {
                 v2f o;
                 o.vertex = UnityObjectToClipPos(v.vertex);
-                o.uv = TRANSFORM_TEX(v.uv, _MainTex);
+                o.uv = v.uv;
                 return o;
+            }
+
+            uint LoadSourceColumn(uint column)
+            {
+                uint2 parts = (uint2)round(_IndexMat.Load(int3(column, 0, 0)) * 65535.0);
+                return parts.x | (parts.y << 16);
             }
 
             uint frag (v2f i) : SV_Target
             {
+                uint result = 0u;
                 uint2 dstTexcoord = (uint2)(i.uv * float2(_IndexMat_TexelSize.z, _DstTexHeight));
-                if (_SrcMatSize == 0 || (int)dstTexcoord.y < _DstMatSize + 3)
+                // Solver layout: header, xdot, predictor, N matrix rows, two work rows.
+                // Only accepted history (N + 5 onward) survives a circuit change.
+                // Reset the header and work rows for both first creation and restart.
+                if (_SrcMatSize > 0 && (int)dstTexcoord.y >= _DstMatSize + 5
+                    && dstTexcoord.x <= (uint)_DstMatSize)
                 {
-                    return SolverStoreUInt(0u);
+                    uint srcCol = LoadSourceColumn(dstTexcoord.x);
+                    int srcRow = (int)dstTexcoord.y - _DstMatSize + _SrcMatSize;
+                    bool validColumn = dstTexcoord.x == (uint)_DstMatSize
+                        ? srcCol == (uint)_SrcMatSize : srcCol < (uint)_SrcMatSize;
+                    if (validColumn && srcCol < (uint)_MainTex_TexelSize.z
+                        && srcRow >= 0 && srcRow < (int)_MainTex_TexelSize.w)
+                    {
+                        result = SolverLoadUInt(uint2(srcCol, srcRow));
+                    }
                 }
-                int srcCol = (int)_IndexMat.Load(int3(dstTexcoord.x, 0, 0));
-                int srcRow = (int)dstTexcoord.y - _DstMatSize + _SrcMatSize;
-                if (srcCol < 0 || srcCol >= (int)_MainTex_TexelSize.z
-                    || srcRow < 0 || srcRow >= (int)_MainTex_TexelSize.w)
-                {
-                    return SolverStoreUInt(0u);
-                }
-                return SolverLoadUInt(uint2(srcCol, srcRow));
+                return result;
             }
             ENDCG
         }

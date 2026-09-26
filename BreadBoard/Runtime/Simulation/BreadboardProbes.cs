@@ -2,7 +2,7 @@ using UdonSharp;
 using UnityEngine;
 using TMPro;
 
-// Local observation settings, deliberately separate from the circuit document.
+// Observation display; BreadboardSync owns the shared hole IDs and their revision.
 [UdonBehaviourSyncMode(BehaviourSyncMode.NoVariableSync)]
 public class BreadboardProbes : UdonSharpBehaviour
 {
@@ -14,6 +14,22 @@ public class BreadboardProbes : UdonSharpBehaviour
     public Transform marker1, marker2;
     [HideInInspector] public string channel1Hole = "", channel2Hole = "";
 
+    public bool ValidHoles(string first, string second)
+    {
+        return first != null && second != null &&
+            (first == "" || layout.HoleIndex(first) >= 0) &&
+            (second == "" || layout.HoleIndex(second) >= 0);
+    }
+    public bool ApplyShared(string first, string second)
+    {
+        if (!ValidHoles(first, second)) return false;
+        bool clearFirst = first == "";
+        bool clearSecond = second == "";
+        channel1Hole = first; channel2Hole = second;
+        if (clearFirst && channel1Input != null) channel1Input.text = "";
+        if (clearSecond && channel2Input != null) channel2Input.text = "";
+        Resolve(); return true;
+    }
     public bool Select(int channel, int hole)
     {
         if (channel < 0 || channel > 1 || hole < 0 || hole >= layout.holeIds.Length) return false;
