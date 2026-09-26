@@ -102,25 +102,7 @@ public static class BreadboardBuilder
         catalog.leadMaterials = new[] { wire, metal, metal, metal, metal, metal };
         renderer.previewValid = Material("PreviewValid",new Color(.2f,1,.5f,.42f),true);
         renderer.previewInvalid = Material("PreviewInvalid",new Color(1,.15f,.1f,.42f),true);
-        int count = state.capacity + 1;
-        renderer.slots = new GameObject[count]; renderer.bodies = new MeshFilter[count]; renderer.bodyRenderers = new MeshRenderer[count];
-        renderer.leads = new LineRenderer[count*3]; renderer.labels = new TMP_Text[count]; renderer.labelTransforms = new Transform[count];
-        var pool = Child("Parts", runtime.transform);
-        for (int i = 0; i < count; i++)
-        {
-            var slot = Child(i == state.capacity ? "Preview" : "Part"+i, pool.transform); renderer.slots[i] = slot;
-            var body = Shape("Body",slot.transform,cube,metal,Vector3.zero,Vector3.one);
-            renderer.bodies[i] = body.GetComponent<MeshFilter>(); renderer.bodyRenderers[i] = body;
-            for (int p = 0; p < 3; p++)
-            {
-                var lead = Child("Lead"+p,slot.transform).AddComponent<LineRenderer>(); lead.useWorldSpace = false;
-                lead.sharedMaterial = metal; lead.widthMultiplier = .0015f; lead.numCornerVertices = 2; lead.numCapVertices = 2;
-                lead.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off; renderer.leads[i*3+p] = lead;
-            }
-            renderer.labels[i] = Label("Label",slot.transform,Vector3.zero,"",.5f,new Vector2(.08f,.03f));
-            renderer.labelTransforms[i] = renderer.labels[i].transform;
-            slot.SetActive(false);
-        }
+        BuildDynamicParts(renderer);
         renderer.pointer = Shape("Pointer",runtime.transform,sphere,Material("Pointer",Color.cyan),Vector3.zero,Vector3.one*.003f).transform;
         renderer.pointer.gameObject.SetActive(false);
         BuildPalette(palette);
@@ -135,6 +117,64 @@ public static class BreadboardBuilder
         PrefabUtility.RecordPrefabInstancePropertyModifications(UdonSharpEditorUtility.GetBackingUdonBehaviour(adapter));
         EditorSceneManager.MarkSceneDirty(board.scene); EditorSceneManager.SaveScene(board.scene); AssetDatabase.SaveAssets();
         Selection.activeGameObject = runtime; Debug.Log("Breadboard installed: 400 holes, 128 parts, fixed rail power.");
+    }
+
+    public static void BuildDynamicParts(BreadboardRenderer renderer)
+    {
+        string folder = Root + "/Prefabs/Parts";
+        if (!AssetDatabase.IsValidFolder(folder)) AssetDatabase.CreateFolder(Root + "/Prefabs", "Parts");
+        var catalog = renderer.catalog;
+        var registered = catalog.partPrefabs;
+        catalog.partPrefabs = new GameObject[catalog.kinds.Length];
+        for (int kind = 0; kind < catalog.kinds.Length; kind++)
+        {
+            if (registered != null && kind < registered.Length && registered[kind] != null)
+            { catalog.partPrefabs[kind] = registered[kind]; continue; }
+            string path = folder + "/" + catalog.kinds[kind] + ".prefab";
+            var existing = AssetDatabase.LoadAssetAtPath<GameObject>(path);
+            if (existing) { catalog.partPrefabs[kind] = existing; continue; }
+            var go = new GameObject(catalog.kinds[kind]);
+            try
+            {
+                var part = go.AddUdonSharpComponent<BreadboardSimplePart>();
+                var body = Shape("Body",go.transform,catalog.bodyMeshes[kind],catalog.bodyMaterials[kind],Vector3.zero,Vector3.one);
+                part.body = body.GetComponent<MeshFilter>(); part.bodyRenderer = body;
+                part.leads = new LineRenderer[3];
+                for (int p = 0; p < 3; p++)
+                {
+                    var line = Child("Lead" + p,go.transform).AddComponent<LineRenderer>();
+                    line.useWorldSpace = false; line.sharedMaterial = catalog.leadMaterials[kind];
+                    line.widthMultiplier = .0015f; line.numCornerVertices = 2; line.numCapVertices = 2;
+                    line.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off; part.leads[p] = line;
+                }
+                part.label = Label("Label",go.transform,Vector3.zero,"",.5f,new Vector2(.08f,.03f));
+                part.labelTransform = part.label.transform;
+                go.SetActive(false);
+                UdonSharpEditorUtility.CopyProxyToUdon(part,ProxySerializationPolicy.All);
+                catalog.partPrefabs[kind] = PrefabUtility.SaveAsPrefabAsset(go,path);
+            }
+            finally { Object.DestroyImmediate(go); }
+        }
+        var old = renderer.transform.Find("Parts");
+        if (old) Object.DestroyImmediate(old.gameObject);
+        renderer.partsRoot = Child("Parts",renderer.transform).transform;
+        UdonSharpEditorUtility.CopyProxyToUdon(catalog,ProxySerializationPolicy.All);
+        UdonSharpEditorUtility.CopyProxyToUdon(renderer,ProxySerializationPolicy.All);
+    }
+
+    [MenuItem("Tools/Breadboard/Upgrade prefab to dynamic parts")]
+    public static void UpgradeDynamicParts()
+    {
+        if (Application.isPlaying) throw new System.InvalidOperationException("Exit Play mode first.");
+        string path = Root + "/Prefabs/InteractiveBreadboard.prefab";
+        var prefab = PrefabUtility.LoadPrefabContents(path);
+        try
+        {
+            BuildDynamicParts(prefab.GetComponentInChildren<BreadboardRenderer>(true));
+            PrefabUtility.SaveAsPrefabAsset(prefab,path);
+        }
+        finally { PrefabUtility.UnloadPrefabContents(prefab); }
+        AssetDatabase.SaveAssets();
     }
 
     public static void BuildPalette(BreadboardPalette palette)

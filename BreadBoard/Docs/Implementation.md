@@ -20,7 +20,7 @@
 - FBXの300中央穴（A〜J、1〜30）と4本×25穴のレールを採用。中央はA〜E、F〜Jをそれぞれ行単位で接続する。
 - 初期値は両方の赤レールを共通+5V、両方の青レールを共通GNDとする。固定電源は穴を占有せず、配置・削除の対象にならない。
 - `BreadboardLayout` の `supplyVoltage`、`positiveHole`、`groundHole`、`conductorGroups` で初期電圧と内部導通を設定する。現在の電圧はStateに保持し、Supply UIから確定するとJSONで共有する。同梱する初期設定や導通を変更する際はlayout版も更新する。
-- 部品上限128個、プレビュー1個を事前生成する。容量を変更する場合はStateの数値だけでなくRendererのプールも同数へ変更する。
+- 回路データの部品上限は128個。表示GameObjectはPrefabから必要時に生成し、プレビューは最大1個を保持する。State容量分の参照配列は確保するが、表示の事前プールは生成しない。
 - JSON上限は60,000文字。全体を検証してから採用し、上限超過の編集は元へ戻す。
 - DはGeneric / Low-leakageの2種類の説明用モデル。Qは既存MNAのKSC1815固定モデルのみ。実在部品の特性保証を意味しない。
 - QのmodelIdは保存するが、現在のMNAへは従来どおり空のconstantsを渡す。外部モデル対応は後で `BreadboardCatalog.MnaConstants` に追加できる。
@@ -37,7 +37,7 @@
 | Runtime/Networking | Manual同期、revision、再送、編集権の引渡し |
 | Runtime/Circuit | 内部導通とWireの統合、削除後の再構築 |
 | Runtime/Simulation | 固定電源と部品をDataList化しMNAGenへ渡す |
-| Runtime/Rendering | プール表示、半透明プレビュー、極性・端子ラベル |
+| Runtime/Rendering | 部品ID単位のPrefab動的生成、基底クラス経由の表示更新、半透明プレビュー |
 | Runtime/Interaction・UI | 反対の手の入力、手の向きによる回転、2点ワイヤー、ページ付きメニュー、E24/1Vステップと右スティック入力 |
 | Editor | シーン生成とデータパイプライン検証 |
 
@@ -87,3 +87,9 @@
 追加の自動検証で2チャンネルの独立指定、Wire統合・分離後の追従、更新待ちでの古い指定解除、GND、片側だけの解除、回路状態が変わらないことを確認済み。PlayモードのUdon上でも、CH1の電源測定、CH2のGND指定、片側解除、Wire追加後のノード変更が既存入力欄に反映されることを確認した。VR実機の指しやすさは別途確認が必要。
 
 プローブ同期修正：回路revisionが同じ受信でも測定穴・マーカー・既存オシロスコープ入力を更新する。古い測定revision、不正な穴、同revisionの異なる内容は適用しない。送信完了で新しいプローブ変更の送信待ちを消さず、受け渡しの確認番号も更新する。観測変更だけではMNAの再構築や波形履歴のリセットを行わない。自動検証に受信・解除・重複・旧版・不正データ・送信項目の10項目を追加。実ネットワークの複数クライアント確認は未実施。
+
+## Prefabによる動的表示（2026-09-26）
+
+`BreadboardPart` を共通基底クラスとし、現在の簡易形状は派生クラス `BreadboardSimplePart` で描画する。`Prefabs/Parts/` にWire/R/C/L/D/Qの6個の非アクティブPrefabを用意した。詳細と追加方法は [DynamicParts.md](DynamicParts.md) を参照。既存シーンとInteractiveBreadboard Prefabは移行済み。
+
+既存データ検証674項目に加え、PlayモードのUdon VMで47項目（6種の生成、virtual呼出し、部品ID維持、値更新、削除、プレビュー切替・再利用・回路非変更）を確認。次フレームの破棄と表示も確認した。ClientSimの初期スナップショット適用を表示テストから分離しているため、複数クライアントでの通信試験を代替しない。テスト終了後はPlayを停止し、テスト回路を保存しない。

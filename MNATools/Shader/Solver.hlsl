@@ -339,9 +339,9 @@ uint determine_time_step_and_order(uint2 pixel)
         // TODO: Adaptive time-step adjustment. Preserve the existing time step for now.
         float err = calc_normalized_error();
         float ts = SolverLoadFloat(OFFSET_TIME_STEP);
-        if (isnan(err) || err == 0)
+        if (isnan(err) || err == 0 || isnan(ts) || ts == 0)
         {
-            ts = ts * 1.5;
+            ts = _DeltaTime;
         }
         else if (SolverLoadUInt(OFFSET_NR_ITER_N) >= MAX_NR_ITER_N)
         {

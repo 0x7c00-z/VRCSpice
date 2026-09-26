@@ -37,7 +37,7 @@ flowchart TD
 | State / `Runtime/Core` | `CircuitState`。最新の正常な回路ドキュメント、revision、次の部品ID。ピン占有索引は派生キャッシュ。 | 正本の唯一の更新窓口。候補状態を検証して一括置換する。GameObject参照を保持しない。 |
 | Serialization / `Runtime/Serialization` | `CircuitJsonCodec`。VRCJsonによる書出し、型/版/値/参照の検証、数値正規化。 | JSON↔検証済み回路。ネットワーク送受信を知らず、将来の保存・読込にも使える。 |
 | Networking / `Runtime/Networking` | `CircuitSync`。Manual同期文字列、送信中revision、再送、所有権の引継ぎ。 | 受信した候補をControllerへ渡す。RendererやMNAGenを直接操作しない。 |
-| Rendering / `Runtime/Rendering` | `BoardRenderer` / `PreviewRenderer`。部品ID→ローカル表示オブジェクトの対応、プール、半透明表示。 | 確定状態・候補からTransformを計算する。Rendererの位置から回路情報を逆算しない。 |
+| Rendering / `Runtime/Rendering` | `BoardRenderer` / `PreviewRenderer`。部品ID→ローカル表示オブジェクトの対応、Prefabの動的生成・破棄、半透明表示。 | 確定状態・候補からTransformを計算する。Rendererの位置から回路情報を逆算しない。 |
 | Connectivity / `Runtime/Circuit` | `ConnectivityBuilder`。内部導通とワイヤーを統合し、穴ID→ノードIDを生成。 | 入力はBoardLayoutと確定部品列。表示、入力、ネットワークに依存しない。削除時も元データから再構築する。 |
 | MnaAdapter / `Runtime/Simulation` | `BreadboardMnaAdapter`。配置素子とボード定義の固定電源をMNA形式へ変換。モデル参照の解決は差し替え可能な変換処理に集める。 | 新しいDataListを完成させてからMNAGenへ渡す。固定電源を重複追加しない。回路の可解性判定・実行の保留・波形制御は行わない。 |
 

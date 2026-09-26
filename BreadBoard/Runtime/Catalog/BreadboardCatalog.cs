@@ -18,6 +18,7 @@ public class BreadboardCatalog : UdonSharpBehaviour
     public float[] e24 = { 10,11,12,13,15,16,18,20,22,24,27,30,33,36,39,43,47,51,56,62,68,75,82,91 };
     public float minimumValue = 1e-12f;
     public float maximumValue = 1e12f;
+    public GameObject[] partPrefabs;
     public Mesh[] bodyMeshes;
     public Material[] bodyMaterials;
     public Material[] leadMaterials;
