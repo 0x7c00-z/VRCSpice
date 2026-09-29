@@ -34,7 +34,7 @@ public class BreadboardMnaAdapter : UdonSharpBehaviour
             DataList nodes = new DataList();
             nodes.Add(connectivity.nodeNames[state.pin0[i]]); nodes.Add(connectivity.nodeNames[state.pin1[i]]);
             if (kind == 5) nodes.Add(connectivity.nodeNames[state.pin2[i]]);
-            record.Add(catalog.kinds[kind] + "_" + catalog.ComponentId(state.ids[i]));
+            record.Add((kind == 6 ? "R" : kind == 7 ? "D" : catalog.kinds[kind]) + "_" + catalog.ComponentId(state.ids[i]));
             record.Add(nodes); record.Add(catalog.MnaConstants(kind, state.values[i], state.models[i]));
             result.Add(record);
         }
@@ -59,6 +59,8 @@ public class BreadboardMnaAdapter : UdonSharpBehaviour
         generator.netlist = next;
         generator.UpdateMNA();
         appliedRevision = state.revision;
+        BreadboardRenderer views = GetComponent<BreadboardRenderer>();
+        if (views != null) views.BindSolver(generator.GetComponent<MNASolve>());
         if (probes != null) probes.Resolve();
     }
 }

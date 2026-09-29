@@ -50,6 +50,7 @@ public class BreadboardState : UdonSharpBehaviour
         Initialize();
         if (count >= capacity) { error = "Board is full"; return false; }
         if (nextSerial >= int.MaxValue || revision >= int.MaxValue) { error = "Revision limit"; return false; }
+        if (kind == 6) { value = 100000000f; model = -1; } // New buttons always start released.
         if (!catalog.ValidParameters(kind, value, model, length)) { error = "Invalid parameter"; return false; }
         if (!CanPlace(kind, anchor, orientation, length, -1)) return false;
         ids[count] = nextSerial++; kinds[count] = kind; orientations[count] = orientation;

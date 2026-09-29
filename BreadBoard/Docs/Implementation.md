@@ -93,3 +93,11 @@
 `BreadboardPart` を共通基底クラスとし、現在の簡易形状は派生クラス `BreadboardSimplePart` で描画する。`Prefabs/Parts/` にWire/R/C/L/D/Qの6個の非アクティブPrefabを用意した。詳細と追加方法は [DynamicParts.md](DynamicParts.md) を参照。既存シーンとInteractiveBreadboard Prefabは移行済み。
 
 既存データ検証674項目に加え、PlayモードのUdon VMで47項目（6種の生成、virtual呼出し、部品ID維持、値更新、削除、プレビュー切替・再利用・回路非変更）を確認。次フレームの破棄と表示も確認した。ClientSimの初期スナップショット適用を表示テストから分離しているため、複数クライアントでの通信試験を代替しない。テスト終了後はPlayを停止し、テスト回路を保存しない。
+
+## 抵抗モデル（2026-09-27）
+
+RのPrefabをFBX由来の抵抗とカラーコードへ変更。カラーコードで表せない値は抵抗値テキストへ切り替える。通常時の部品番号は表示しない。[ResistorDisplay.md](ResistorDisplay.md) に変換仕様、更新メニュー、検証結果を記載。
+
+## ワイヤーの3D表示
+
+WireはBlendShapeによる1〜9 pitchesの長さ変更と、長さに対応する被覆色に対応。詳細は [WireDisplay.md](WireDisplay.md)。

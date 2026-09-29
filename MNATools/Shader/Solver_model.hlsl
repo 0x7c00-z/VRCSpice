@@ -52,16 +52,16 @@ float f(uint index)
         case 1:
             {
             //Diode
-            // Row layout: [1] float IS, [2] float 1/nVt, [3] uint cathode [4] uint anode
+            // Row layout: [1] Is, [2] 1/nVt, [3..4] cathode/anode, [5..9] TT, Cjo, Vj, m, Fc.
                 float Is = C_LoadFloat(uint2(1, index));
                 float nVtinv = C_LoadFloat(uint2(2, index));
                 float v = C_LoadX(uint2(4, index)) - C_LoadX(uint2(3, index));
                 float vdot = C_LoadXdot(uint2(4, index)) - C_LoadXdot(uint2(3, index));
-                float TT = 2e-9;
-                float Cjo = 2e-12;
-                float Vj = 0.6;
-                float m = 0.5;
-                float Fc = 0.5;
+                float TT = C_LoadFloat(uint2(5, index));
+                float Cjo = C_LoadFloat(uint2(6, index));
+                float Vj = C_LoadFloat(uint2(7, index));
+                float m = C_LoadFloat(uint2(8, index));
+                float Fc = C_LoadFloat(uint2(9, index));
             
                 float Cj = Cjo * ((v < Fc * Vj) ?
                     pow(1 - v / Vj, -m) :
@@ -212,18 +212,20 @@ float dfidxj(uint i, uint j)
                     float nVtinv = C_LoadFloat(uint2(2, i));
                     float v = C_LoadX(uint2(4, i)) - C_LoadX(uint2(3, i));
                     float vdot = C_LoadXdot(uint2(4, i)) - C_LoadXdot(uint2(3, i));
-                    float TT = 2e-9;
-                    float Cjo = 2e-12;
-                    float Vj = 0.6;
-                    float m = 0.5;
-                    float Fc = 0.5;
+                    
+                    float TT = C_LoadFloat(uint2(5, i));
+                    float Cjo = C_LoadFloat(uint2(6, i));
+                    float Vj = C_LoadFloat(uint2(7, i));
+                    float m = C_LoadFloat(uint2(8, i));
+                    float Fc = C_LoadFloat(uint2(9, i));
             
                     float Cjdiff = m * Cjo / Vj * ((v < Fc * Vj) ?
                         pow(1.0 - v / Vj, -m - 1.0) :
                         pow(1 - Fc, -m - 1.0)
                     );
-                    data += direction * Is * nVtinv * exp(nVtinv * v)
-                    + (Cjdiff + TT * Is * nVtinv * nVtinv * exp(nVtinv * v) * vdot);
+                    float g = Is * nVtinv * exp(nVtinv * v);
+                    // x and xdot are independent here: d[I(v) + C(v)*vdot]/dx[j].
+                    data += direction * (g + (Cjdiff + TT * nVtinv * g) * vdot);
                 }
                 break;
             }
@@ -398,17 +400,17 @@ float dfidxdotj(uint i, uint j)
                     float nVtinv = C_LoadFloat(uint2(2, i));
                     float v = C_LoadX(uint2(4, i)) - C_LoadX(uint2(3, i));
                     float vdot = C_LoadXdot(uint2(4, i)) - C_LoadXdot(uint2(3, i));
-                    float TT = 2e-9;
-                    float Cjo = 2e-12;
-                    float Vj = 0.6;
-                    float m = 0.5;
-                    float Fc = 0.5;
+                    float TT = C_LoadFloat(uint2(5, i));
+                    float Cjo = C_LoadFloat(uint2(6, i));
+                    float Vj = C_LoadFloat(uint2(7, i));
+                    float m = C_LoadFloat(uint2(8, i));
+                    float Fc = C_LoadFloat(uint2(9, i));
             
                     float Cj = Cjo * ((v < Fc * Vj) ?
                         pow(1 - v / Vj, -m) :
                         pow(1 - Fc, -m - 1.0) * (1 - Fc * (1.0 + m) + m * v / Vj)
                     );
-                    data += Cj + TT * Is * nVtinv * exp(v * nVtinv);
+                    data += direction * (Cj + TT * Is * nVtinv * exp(v * nVtinv));
                 }
                 break;
             }

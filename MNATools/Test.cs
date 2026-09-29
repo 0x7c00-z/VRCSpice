@@ -72,7 +72,7 @@ public class Test : UdonSharpBehaviour
         //split into lines
         if (!netlistfield) return;
         string[] lines = netlistfield.text.Split("\n");
-        generator.netlist.Clear();
+        DataList nextNetlist = new DataList();
 
         for (int i = 0; i < lines.Length; i++) { // for each line
             if (lines[i].Length == 0) continue;
@@ -101,7 +101,12 @@ public class Test : UdonSharpBehaviour
                     break;
                 case "D":
                     num_nets = 2;
-                    num_consts = 2;
+                    num_consts = 7; // Is Vt TT Cjo Vj m Fc
+                    if (elemants.Length != 10)
+                    {
+                        Debug.LogError(elemants[0] + ": expected Dname anode cathode Is Vt TT Cjo Vj m Fc.");
+                        return;
+                    }
                     break;
                 case "Q":
                     num_nets = 3;
@@ -130,12 +135,19 @@ public class Test : UdonSharpBehaviour
                 }
                 for (int j = 0; j < num_consts; j++)
                 {
-                    ((DataList)component[2]).Add(float.Parse(elemants[1 + num_nets + j]));
+                    float value;
+                    if (!float.TryParse(elemants[1 + num_nets + j], out value))
+                    {
+                        Debug.LogError(elemants[0] + ": invalid numeric constant.");
+                        return;
+                    }
+                    ((DataList)component[2]).Add(value);
                 }
-                generator.netlist.Add(component);
+                nextNetlist.Add(component);
             }
         }
 
+        generator.netlist = nextNetlist;
         generator.UpdateMNA();
     }
 }

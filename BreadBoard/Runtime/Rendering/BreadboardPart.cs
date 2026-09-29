@@ -10,6 +10,10 @@ public class BreadboardPart : UdonSharpBehaviour
     [HideInInspector] public int componentId;
     [HideInInspector] public bool isPreview;
     [HideInInspector] public bool initialized;
+    [HideInInspector] public MNASolve solver;
+    public Material emitterTemplate;
+    public Renderer emitterRenderer;
+    [HideInInspector] public Material emitterMaterial;
     [HideInInspector] public Material previewValid, previewInvalid;
 
     // Explicit initialization: Start ordering is not used for binding a new instance.
@@ -26,6 +30,9 @@ public class BreadboardPart : UdonSharpBehaviour
     public virtual void ApplyState(int kind, int anchor, int orientation, int length,
         float value, int model, bool valid) { }
 
+    // Supplied by the board after MNA construction; null invalidates old row bindings.
+    public virtual void BindSolver(MNASolve activeSolver) { solver = activeSolver; }
+
     // Release any per-instance resources here. Called before replacement/deletion.
-    public virtual void ReleasePart() { initialized = false; }
+    public virtual void ReleasePart() { solver = null; initialized = false; }
 }

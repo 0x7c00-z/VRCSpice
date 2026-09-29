@@ -40,6 +40,82 @@ public class BreadboardSync : UdonSharpBehaviour
     private bool awaitingGrant;
     private string sharedSnapshot;
 
+    private int[] buttonIds, buttonPlayers, buttonGestures;
+    private bool[] buttonReleased;
+    private float[] buttonExpiry;
+
+    // Requests travel through this scene behaviour, never through dynamically created network objects.
+    public void RequestButton(int id, bool held, int gesture)
+    {
+        if (!hasState || !Utilities.IsValid(Networking.LocalPlayer)) return;
+        if (Networking.IsOwner(gameObject)) AcceptButtonRequest(id, held, gesture, Networking.LocalPlayer.playerId);
+        else SendCustomNetworkEvent(NetworkEventTarget.Owner, nameof(ReceiveButtonRequest), id, held, gesture);
+    }
+
+    [NetworkCallable(maxEventsPerSecond: 30)]
+    public void ReceiveButtonRequest(int id, bool held, int gesture)
+    {
+        VRCPlayerApi caller = NetworkCalling.CallingPlayer;
+        if (!Utilities.IsValid(caller)) return;
+        AcceptButtonRequest(id, held, gesture, caller.playerId);
+    }
+
+    private bool ButtonAuthority()
+    {
+        return hasState && Networking.IsOwner(gameObject) && !awaitingGrant &&
+            Utilities.IsValid(Networking.LocalPlayer) && (pendingGrant < 0 || pendingGrant == Networking.LocalPlayer.playerId);
+    }
+    private void PrepareButtons()
+    {
+        if(buttonIds != null)return;
+        buttonIds=new int[state.capacity];buttonPlayers=new int[state.capacity];buttonGestures=new int[state.capacity];
+        buttonReleased=new bool[state.capacity];buttonExpiry=new float[state.capacity];
+    }
+    // Stable IDs protect against compacted slots after deletion. A lease heals missing release/exit events.
+    private int ButtonEntry(int id)
+    {
+        PrepareButtons();
+        for(int i=0;i<buttonIds.Length;i++)if(buttonIds[i]==id)return i;
+        for(int i=0;i<buttonIds.Length;i++)if(buttonIds[i]==0 || state.FindId(buttonIds[i])<0)
+        {buttonIds[i]=id;buttonPlayers[i]=-1;buttonGestures[i]=-1;buttonReleased[i]=true;buttonExpiry[i]=0;return i;}
+        return -1;
+    }
+    public void AcceptButtonRequest(int id, bool held, int gesture, int player)
+    {
+        if(!ButtonAuthority() || gesture<1)return;
+        int slot=state.FindId(id);
+        if(slot<0 || state.kinds[slot]!=6)return;
+        int entry=ButtonEntry(id);if(entry<0)return;
+        if(buttonPlayers[entry]!=player)
+        {
+            if(!held || (!buttonReleased[entry] && Time.time<buttonExpiry[entry]))return;
+            buttonPlayers[entry]=player;buttonGestures[entry]=-1;buttonReleased[entry]=true;
+        }
+        if(gesture<buttonGestures[entry] || (held && gesture==buttonGestures[entry] && buttonReleased[entry]))return;
+        buttonGestures[entry]=gesture;buttonReleased[entry]=!held;buttonExpiry[entry]=Time.time+2f;
+        SetButtonValue(slot,held);
+    }
+    private void SetButtonValue(int slot, bool held)
+    {
+        string before=codec.Encode();
+        if(!state.ChangeParameter(slot,held?.05f:100000000f,-1))return;
+        string after=codec.Encode();
+        if(string.IsNullOrEmpty(after)) {if(codec.TryDecode(before))codec.ApplyDecoded();return;}
+        pendingSnapshot=after;pendingGrant=Networking.LocalPlayer.playerId;pendingGrantRevision=state.revision;
+        pendingToken++;dirty=true;nextSendTime=0;
+        controller.CircuitChanged();
+    }
+    private void ExpireButtons()
+    {
+        if(!ButtonAuthority())return;
+        for(int i=0;i<state.count;i++)if(state.kinds[i]==6 && state.values[i]==.05f)
+        {
+            int entry=ButtonEntry(state.ids[i]);
+            if(entry>=0 && (buttonReleased[entry] || Time.time>=buttonExpiry[entry] || !Utilities.IsValid(VRCPlayerApi.GetPlayerById(buttonPlayers[entry]))))
+            {buttonReleased[entry]=true;SetButtonValue(i,false);}
+        }
+    }
+
     private void Start()
     {
         VRCPlayerApi owner = Networking.GetOwner(gameObject);
@@ -61,6 +137,7 @@ public class BreadboardSync : UdonSharpBehaviour
             }
             initializing = false;
         }
+        ExpireButtons();
         if (Networking.IsOwner(gameObject) && dirty && Time.time >= nextSendTime && !Networking.IsClogged)
         {
             nextSendTime = Time.time + 1f;
@@ -230,6 +307,7 @@ public class BreadboardSync : UdonSharpBehaviour
 
     public override void OnOwnershipTransferred(VRCPlayerApi player)
     {
+        buttonIds = null; // A new authority releases any hold that is not renewed.
         previousOwnerId = knownOwnerId;
         knownOwnerId = Utilities.IsValid(player) ? player.playerId : -1;
         if (dirty && Utilities.IsValid(player) && !player.isLocal && !string.IsNullOrEmpty(sharedSnapshot) && codec.TryDecode(sharedSnapshot))

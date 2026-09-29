@@ -47,7 +47,7 @@ public class BreadboardPalette : UdonSharpBehaviour
         supplyLabel.text = "RED: " + controller.state.supplyVoltage.ToString("0.###") + "V   BLUE: GND";
         if (page == 0)
         {
-            Caption(0,"Parts >"); if (kind == 0) Caption(1,"Two-point"); else if (kind >= 4) Caption(1,"Model >");
+            Caption(0,"Parts >"); if (kind == 0) Caption(1,"Two-point"); else if (kind == 4 || kind == 5 || kind == 7) Caption(1,"Model >");
             Caption(2,"Supply >"); if (kind == 0) Caption(5,"Cancel wire");
             if (CanStepValue()) { Caption(3,"Value +"); Caption(9,"Value -"); }
             Caption(6,"Place"); Caption(7,"Erase"); Caption(8,"Edit");
@@ -132,7 +132,7 @@ public class BreadboardPalette : UdonSharpBehaviour
             if (index == 0) { page = 2; listPage = 0; controller.CancelWire(); }
             else if (index == 1)
             {
-                if (kind >= 4) { page = 3; listPage = 0; }
+                if (kind == 4 || kind == 5 || kind == 7) { page = 3; listPage = 0; }
                 else controller.ShowFeedback("Wire: choose start, then end hole");
             }
             else if (index == 2) { page = 4; controller.CancelWire(); }
@@ -140,7 +140,7 @@ public class BreadboardPalette : UdonSharpBehaviour
             else if (index == 5) controller.CancelWire();
             else if (index >= 6 && index <= 8) { mode = index-6; selectedId = 0; controller.CancelWire(); }
             else if (index == 9 || index == 10)
-            { wireLength = Mathf.Clamp(wireLength + (index == 9 ? -1 : 1),1,30); if (selectedId > 0) controller.EditSelected(true); }
+            { wireLength = Mathf.Clamp(wireLength + (index == 9 ? -1 : 1),1,9); if (selectedId > 0) controller.EditSelected(true); }
             else if (index == 12 || index == 13) { mode = index-9; selectedId = 0; controller.CancelWire(); }
             else if ((index == 14 || index == 15) && controller.probes != null) controller.circuitSync.SetProbe(index-14,-1);
         }

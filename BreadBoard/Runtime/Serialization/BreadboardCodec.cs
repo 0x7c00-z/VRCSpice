@@ -39,7 +39,7 @@ public class BreadboardCodec : UdonSharpBehaviour
             if (kind == 5) pins.Add(layout.holeIds[state.pin2[i]]);
             record.Add("pins", pins);
             if (kind == 0) record.Add("lengthPitches", state.lengths[i]);
-            else if (kind <= 3) record.Add("valueSI", state.values[i]);
+            else if (kind <= 3 || kind == 6) record.Add("valueSI", state.values[i]);
             else record.Add("modelId", catalog.modelIds[state.models[i]]);
             records.Add(record);
         }
@@ -119,7 +119,7 @@ public class BreadboardCodec : UdonSharpBehaviour
                 if (record.ContainsKey("valueSI") || record.ContainsKey("modelId")) return false;
                 lengths[i] = ReadInt(record, "lengthPitches");
             }
-            else if (kind <= 3)
+            else if (kind <= 3 || kind == 6)
             {
                 if (record.ContainsKey("modelId") || record.ContainsKey("lengthPitches")) return false;
                 if (!record.TryGetValue("valueSI", TokenType.Double, out token)) return false;
@@ -181,7 +181,7 @@ public class BreadboardCodec : UdonSharpBehaviour
             int j = state.FindId(ids[i]);
             if (j < 0 || kinds[i] != state.kinds[j] || a[i] != state.pin0[j] || b[i] != state.pin1[j] ||
                 c[i] != state.pin2[j] || orientations[i] != state.orientations[j] || lengths[i] != state.lengths[j]) return false;
-            if (kinds[i] >= 1 && kinds[i] <= 3 && values[i] != state.values[j]) return false;
+            if (((kinds[i] >= 1 && kinds[i] <= 3) || kinds[i] == 6) && values[i] != state.values[j]) return false;
             if (kinds[i] >= 4 && models[i] != state.models[j]) return false;
         }
         return true;

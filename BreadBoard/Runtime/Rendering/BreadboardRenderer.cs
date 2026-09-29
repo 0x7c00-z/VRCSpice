@@ -11,6 +11,9 @@ public class BreadboardRenderer : UdonSharpBehaviour
     public Transform partsRoot;
     public Material previewValid, previewInvalid;
     public Transform pointer;
+    private MNASolve boundSolver;
+    private Material[] emitterTemplates, emitterMaterials;
+    private int emitterCount;
     private BreadboardPart[] instances;
     private int[] instanceIds, instanceKinds;
     private BreadboardPart previewPart;
@@ -38,6 +41,7 @@ public class BreadboardRenderer : UdonSharpBehaviour
         BreadboardPart part = go.GetComponent<BreadboardPart>();
         if (part == null) { Debug.LogError("Breadboard: prefab requires BreadboardPart on root"); Destroy(go); return null; }
         go.name = preview ? "Preview" : "Part_" + id;
+        if(!preview && part.emitterTemplate!=null && part.emitterRenderer!=null)part.emitterMaterial=BoardEmitter(part.emitterTemplate,part.emitterRenderer);
         part.InitializePart(layout, catalog, placement, id, preview, previewValid, previewInvalid);
         return part;
     }
@@ -50,7 +54,7 @@ public class BreadboardRenderer : UdonSharpBehaviour
 
     public void Rebuild()
     {
-        state.Initialize();
+        state.Initialize();boundSolver=null;
         if (instances == null)
         {
             // Only references are reserved; GameObjects are created on demand.
@@ -74,10 +78,39 @@ public class BreadboardRenderer : UdonSharpBehaviour
                 for (int i = 0; i < instances.Length; i++) if (instances[i] == null)
                 { instances[i] = part; instanceIds[i] = state.ids[slot]; instanceKinds[i] = state.kinds[slot]; break; }
             }
+            part.BindSolver(null);
             part.ApplyState(state.kinds[slot], state.pin0[slot], state.orientations[slot], state.lengths[slot], state.values[slot], state.models[slot], true);
             part.gameObject.SetActive(true);
         }
         HidePreview();
+    }
+
+    public void BindSolver(MNASolve solver)
+    {
+        boundSolver=solver;
+        if (instances == null) return;
+        for(int i=0;i<instances.Length;i++)
+            if(instances[i]!=null) instances[i].BindSolver(solver);
+    }
+
+    private Material BoardEmitter(Material template,Renderer source)
+    {
+        if(emitterTemplates==null){emitterTemplates=new Material[state.capacity];emitterMaterials=new Material[state.capacity];}
+        for(int i=0;i<emitterCount;i++)if(emitterTemplates[i]==template)return emitterMaterials[i];
+        if(emitterCount>=emitterMaterials.Length)return null;
+        // Renderer.material provides the supported Udon material-instance path.
+        source.sharedMaterial=template;
+        Material material=source.material;
+        emitterTemplates[emitterCount]=template;emitterMaterials[emitterCount++]=material;return material;
+    }
+    private void LateUpdate()
+    {
+        if(boundSolver==null)return;
+        for(int i=0;i<emitterCount;i++)boundSolver.WriteToMaterial(emitterMaterials[i]);
+    }
+    private void OnDestroy()
+    {
+        for(int i=0;i<emitterCount;i++)if(emitterMaterials[i]!=null)Destroy(emitterMaterials[i]);
     }
 
     public void HidePreview()

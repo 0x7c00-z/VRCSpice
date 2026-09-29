@@ -7,14 +7,19 @@ public class BreadboardCatalog : UdonSharpBehaviour
 {
     public string catalogId = "breadboard-basic";
     public int catalogVersion = 1;
-    public string[] kinds = { "Wire", "R", "C", "L", "D", "Q" };
-    public string[] kindLabels = { "Wire", "Resistor", "Capacitor", "Inductor", "Diode", "Transistor" };
-    public string[] footprints = { "wire-straight", "axial-3p", "radial-2p", "axial-3p", "diode-3p", "bjt-3pin" };
-    public string[] modelIds = { "diode-generic", "diode-low-leakage", "KSC1815-fixed" };
-    public string[] modelLabels = { "Generic diode", "Low-leakage diode", "KSC1815" };
-    public int[] modelKinds = { 4, 4, 5 };
-    public float[] diodeIs = { 1e-12f, 1e-14f, 0f };
-    public float[] diodeVt = { 0.02585f, 0.02585f, 0f };
+    public string[] kinds = { "Wire", "R", "C", "L", "D", "Q", "Button", "LED" };
+    public string[] kindLabels = { "Wire", "Resistor", "Capacitor", "Inductor", "Diode", "Transistor", "Button", "LED" };
+    public string[] footprints = { "wire-straight", "axial-3p", "radial-2p", "axial-3p", "diode-3p", "bjt-3pin", "button-2p", "led-1p" };
+    public string[] modelIds = { "diode-generic", "diode-low-leakage", "KSC1815-fixed", "led-red-provisional" };
+    public string[] modelLabels = { "Generic diode", "Low-leakage diode", "KSC1815", "Red LED (provisional)" };
+    public int[] modelKinds = { 4, 4, 5, 7 };
+    public float[] diodeIs = { 1e-12f, 1e-14f, 0f, 5.961e-10f };
+    public float[] diodeVt = { 0.02585f, 0.02585f, 0f, .1608387f }; // Effective n*thermal voltage [V].
+    public float[] diodeTT = { 2e-9f, 2e-9f, 0f, 2e-9f }; // Transit time [s].
+    public float[] diodeCjo = { 2e-12f, 2e-12f, 0f, 5e-10f }; // Zero-bias junction capacitance [F].
+    public float[] diodeVj = { 0.6f, 0.6f, 0f, .6f }; // Junction potential [V].
+    public float[] diodeM = { 0.5f, 0.5f, 0f, .5f }; // Junction grading coefficient.
+    public float[] diodeFc = { 0.5f, 0.5f, 0f, .5f }; // Forward-bias continuation threshold.
     public float[] e24 = { 10,11,12,13,15,16,18,20,22,24,27,30,33,36,39,43,47,51,56,62,68,75,82,91 };
     public float minimumValue = 1e-12f;
     public float maximumValue = 1e12f;
@@ -54,9 +59,9 @@ public class BreadboardCatalog : UdonSharpBehaviour
     }
 
     public int PinCount(int kind) { return kind == 5 ? 3 : 2; }
-    public int Span(int kind, int length) { return kind == 0 ? length : (kind == 2 || kind == 5 ? 2 : 3); }
+    public int Span(int kind, int length) { return kind == 7 ? 1 : kind == 0 ? length : (kind == 2 || kind == 5 || kind == 6 ? 2 : 3); }
     public string ComponentId(int id) { return "c" + id.ToString("D6"); }
-    public float DefaultValue(int kind) { return kind == 2 ? 1e-7f : (kind == 3 ? 1e-3f : 1000f); }
+    public float DefaultValue(int kind) { return kind == 6 ? 100000000f : kind == 2 ? 1e-7f : (kind == 3 ? 1e-3f : 1000f); }
 
     public float NextValue(int kind, float value, int direction)
     {
@@ -78,6 +83,7 @@ public class BreadboardCatalog : UdonSharpBehaviour
     public bool ValidParameters(int kind, float value, int model, int length)
     {
         if (kind < 0 || kind >= kinds.Length) return false;
+        if (kind == 6) return model == -1 && (value == 100000000f || value == .05f);
         if (kind == 0) return length >= 1 && length <= 30;
         if (kind <= 3) return value > 0f && value <= 1e12f;
         return model >= 0 && model < modelIds.Length && modelKinds[model] == kind;
@@ -86,6 +92,7 @@ public class BreadboardCatalog : UdonSharpBehaviour
     public string ParameterLabel(int kind, float value, int model, int length)
     {
         if (kind == 0) return length + " pitches";
+        if (kind == 6) return value == .05f ? "Pressed (0.05 Ohm)" : "Released (100 MOhm)";
         if (kind >= 4) return model >= 0 && model < modelLabels.Length ? modelLabels[model] : "Unknown model";
         string unit = kind == 1 ? "Ohm" : (kind == 2 ? "F" : "H");
         if (value >= 1000000f) return (value / 1000000f).ToString("0.###") + " M" + unit;
@@ -102,8 +109,14 @@ public class BreadboardCatalog : UdonSharpBehaviour
     public DataList MnaConstants(int kind, float value, int model)
     {
         DataList constants = new DataList();
-        if (kind >= 1 && kind <= 3) constants.Add(value);
-        else if (kind == 4) { constants.Add(diodeIs[model]); constants.Add(diodeVt[model]); }
+        if ((kind >= 1 && kind <= 3) || kind == 6) constants.Add(value);
+        else if (kind == 4 || kind == 7)
+        {
+            // MNAGen diode contract: Is, Vt, TT, Cjo, Vj, m, Fc.
+            constants.Add(diodeIs[model]); constants.Add(diodeVt[model]);
+            constants.Add(diodeTT[model]); constants.Add(diodeCjo[model]);
+            constants.Add(diodeVj[model]); constants.Add(diodeM[model]); constants.Add(diodeFc[model]);
+        }
         // Q currently accepts no constants and uses MNAGen's KSC1815 model.
         return constants;
     }

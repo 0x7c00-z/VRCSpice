@@ -17,7 +17,7 @@ public static class BreadboardDynamicPartVerification
     {
         s.SetProgramVariable("__1_kind__param",kind); s.SetProgramVariable("__1_anchor__param",anchor);
         s.SetProgramVariable("__1_orientation__param",2); s.SetProgramVariable("__1_length__param",2);
-        s.SetProgramVariable("__0_value__param",kind == 2 ? 1e-7f : kind == 3 ? 1e-3f : 1000f);
+        s.SetProgramVariable("__0_value__param",kind == 6 ? 100000000f : kind == 2 ? 1e-7f : kind == 3 ? 1e-3f : 1000f);
         s.SetProgramVariable("__0_model__param",kind == 4 ? 0 : kind == 5 ? 2 : -1);
         s.SendCustomEvent("__0_Add"); Check((bool)s.GetProgramVariable("__0___0_Add__ret"),"add kind " + kind);
     }
@@ -44,21 +44,24 @@ public static class BreadboardDynamicPartVerification
         while ((int)s.GetProgramVariable("count") > 0)
         { s.SetProgramVariable("__0_slot__param",0); s.SendCustomEvent("__0_Remove"); }
         r.SendCustomEvent("Rebuild");
-        for (int kind = 0; kind < 6; kind++) Add(s,kind,kind*30);
+        for (int kind = 0; kind < 7; kind++) Add(s,kind,kind*30);
         r.SendCustomEvent("Rebuild");
         var ids = (int[])s.GetProgramVariable("ids");
-        var objects = new GameObject[6];
-        for (int kind = 0; kind < 6; kind++)
+        var objects = new GameObject[7];
+        for (int kind = 0; kind < 7; kind++)
         {
             var t = renderer.partsRoot.Find("Part_" + ids[kind]); Check(t != null,"created kind " + kind);
             objects[kind] = t.gameObject;
-            var part = t.GetComponent<BreadboardSimplePart>(); var u = Back(part);
+            var part = t.GetComponent<BreadboardPart>(); var u = Back(part);
             Check((bool)u.GetProgramVariable("initialized") && !(bool)u.GetProgramVariable("isPreview"),"base initialization " + kind);
-            Check(part.label.text.StartsWith(renderer.catalog.kinds[kind] + ids[kind]),"derived virtual rendering " + kind);
-            Check(t.GetComponentsInChildren<Collider>(true).Length == 0 && t.GetComponentsInChildren<VRC.SDK3.Components.VRCObjectSync>(true).Length == 0,"local nonphysical view " + kind);
+            if(kind == 6) { var button=t.GetComponent<BreadboardButtonPart>(); Check(button.buttonRenderer.GetBlendShapeWeight(0)==0 && button.interactCube.enabled,"released Button view"); } else if(kind == 0) { var wire=t.GetComponent<BreadboardWirePart>(); Check(wire.wireRenderer.gameObject.activeSelf && Mathf.Abs(wire.wireRenderer.GetBlendShapeWeight(0)-100f/9f)<.001f && wire.wireRenderer.sharedMaterials[wire.colorSlot]==wire.lengthMaterials[1],"modeled wire virtual rendering"); } else if(kind == 1) {
+                var resistor=t.GetComponent<BreadboardResistorPart>();
+                Check(!resistor.fallbackLabel.gameObject.activeSelf && resistor.resistorRenderer.sharedMaterials[resistor.bandSlots[2]] == resistor.codeMaterials[2],"modeled resistor virtual rendering");
+            } else Check(t.GetComponent<BreadboardSimplePart>().label.text.StartsWith(renderer.catalog.kinds[kind] + ids[kind]),"derived virtual rendering " + kind);
+            Check(t.GetComponentsInChildren<Collider>(true).Length == (kind == 6 ? 1 : 0) && t.GetComponentsInChildren<VRC.SDK3.Components.VRCObjectSync>(true).Length == 0,"local nonphysical view " + kind);
         }
         r.SendCustomEvent("Rebuild");
-        for (int kind = 0; kind < 6; kind++) Check(renderer.partsRoot.Find("Part_" + ids[kind]).gameObject == objects[kind],"duplicate rebuild reuses kind " + kind);
+        for (int kind = 0; kind < 7; kind++) Check(renderer.partsRoot.Find("Part_" + ids[kind]).gameObject == objects[kind],"duplicate rebuild reuses kind " + kind);
         s.SetProgramVariable("__0_slot__param",1); s.SendCustomEvent("__0_Remove"); r.SendCustomEvent("Rebuild");
         Check(!objects[1].activeSelf,"deleted part hidden before deferred destruction");
         Check(renderer.partsRoot.Find("Part_" + ids[1]).gameObject == objects[2],"array compaction preserves component ID instance");
@@ -67,11 +70,11 @@ public static class BreadboardDynamicPartVerification
         Check(objects[2].GetComponent<BreadboardSimplePart>().label.text.Contains("220"),"value update reaches existing view");
         int revision = (int)s.GetProgramVariable("revision"); int count = (int)s.GetProgramVariable("count");
         Preview(r,1,true);
-        BreadboardSimplePart first = null;
-        foreach(Transform t in renderer.partsRoot) if(t.name == "Preview" && t.gameObject.activeSelf) first = t.GetComponent<BreadboardSimplePart>();
-        Check((bool)Back(first).GetProgramVariable("isPreview") && first.bodyRenderer.sharedMaterial == renderer.previewValid,"preview base flag and ghost material");
+        BreadboardResistorPart first = null;
+        foreach(Transform t in renderer.partsRoot) if(t.name == "Preview" && t.gameObject.activeSelf) first = t.GetComponent<BreadboardResistorPart>();
+        Check((bool)Back(first).GetProgramVariable("isPreview") && first.resistorRenderer.sharedMaterials[0] == renderer.previewValid,"preview base flag and ghost material");
         Preview(r,1,false);
-        Check(first.bodyRenderer.sharedMaterial == renderer.previewInvalid,"preview validity updates same instance");
+        Check(first.resistorRenderer.sharedMaterials[0] == renderer.previewInvalid,"preview validity updates same instance");
         r.SendCustomEvent("HidePreview"); Check(!first.gameObject.activeSelf,"hide preview");
         Preview(r,1,true); Check(first.gameObject.activeSelf,"reuse hidden preview");
         Preview(r,5,true); Check(!first.gameObject.activeSelf,"kind change releases previous preview");

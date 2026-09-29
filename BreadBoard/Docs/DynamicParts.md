@@ -2,14 +2,14 @@
 
 ## 実装した範囲
 
-表示管理は `BreadboardRenderer`、個々の表示は `BreadboardPart : UdonSharpBehaviour` の派生クラスが担当する。現在は `BreadboardSimplePart` が従来の簡易形状と文字を描画する。カラーコード・LED発光・スイッチ入力やBlendShape・MNAの定数更新は今回の範囲外。
+表示管理は `BreadboardRenderer`、個々の表示は `BreadboardPart : UdonSharpBehaviour` の派生クラスが担当する。Rは `BreadboardResistorPart` がモデルとカラーコード（表現不能な値はテキスト）を描画する。他の部品は `BreadboardSimplePart` が従来の簡易形状と文字を描画する。LED発光・スイッチ入力やBlendShape・MNAの定数更新は未実装。
 
 - Catalogの `partPrefabs` はkindsと同じ順序のGameObject配列。
 - 確定部品は安定した部品IDに紐付ける。Stateの配列位置が削除や受信で変わっても同じIDの表示を再利用する。
 - 新IDは生成、既存IDは更新、消えたIDは非表示にして破棄する。同じIDでも種別が変わった場合は交換する。
 - プレビューは同じ種別なら再利用し、種別変更時に交換する。非表示のプレビューを最大1個保持する。
 - 空の回路では確定部品の表示GameObjectは0個。容量分の参照配列だけを確保する。データ容量128と表示生成方式は独立。
-- 生成は各クライアントのローカル処理。回路JSON・穴占有・所有権の仕組みは変更していない。Collider、Pickup、VRCObjectSyncは部品に付けない。
+- 生成は各クライアントのローカル処理。回路JSON・穴占有・所有権の仕組みは変更していない。Pickup、VRCObjectSyncは部品に付けない。ButtonのみInteract用BoxColliderを持ち、配置判定には使わない。
 
 ## ライフサイクル
 
@@ -39,3 +39,9 @@
 `Tools > Breadboard > Upgrade prefab to dynamic parts` はInteractiveBreadboardの旧Partsプールを空の生成先へ置き換える。登録済みPrefab・既存の部品Prefabファイルは上書きしない。現在のシーンには適用済み。
 
 `Tools > Breadboard > Verify dynamic parts (Play mode)` はテスト用回路を作ってコンパイル済みUdonを実行する。試験中は同期と手入力を停止するため、終了時はPlayを停止すること。編集モードの `Verify data pipeline` とは別の検証。
+
+Wireは専用のBreadboardWirePartを使用する。BlendShapeと互換表示については [WireDisplay.md](WireDisplay.md) を参照。
+
+ButtonはBreadboardButtonPartを使用し、Interact専用の透明BoxColliderを持つ。配置判定へのCollider利用は禁止のまま。詳細は [Button.md](Button.md)。
+
+LEDはBreadboardLedPartを使用する。MNA構築後にBreadboardからBindSolverで参照を渡す。発光Materialはボード内で共有し、MaterialPropertyBlockで部品ごとの行番号を渡す。詳細は [LED.md](LED.md)。

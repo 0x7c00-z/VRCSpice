@@ -150,9 +150,9 @@ public class BreadboardController : UdonSharpBehaviour
                     else if (state.placement.WireBetween(wireStart,candidateHole))
                     {
                         palette.orientation = state.placement.wireOrientation; palette.wireLength = state.placement.wireLength;
-                        bool valid = state.CanPlace(0,wireStart,palette.orientation,palette.wireLength,-1) && state.count < state.capacity;
+                        bool valid = palette.wireLength <= 9 && state.CanPlace(0,wireStart,palette.orientation,palette.wireLength,-1) && state.count < state.capacity;
                         boardRenderer.Preview(0,wireStart,palette.orientation,palette.wireLength,0,-1,valid);
-                        hint += " | " + palette.wireLength + " pitches | " + (valid ? "Trigger: wire end" : state.error);
+                        hint += " | " + palette.wireLength + " pitches | " + (valid ? "Trigger: wire end" : (palette.wireLength > 9 ? "Wire: max 9 pitches" : state.error));
                     }
                     else { boardRenderer.HidePreview(); hint += " | Choose an aligned end hole"; }
                 }
@@ -210,6 +210,7 @@ public class BreadboardController : UdonSharpBehaviour
                 wireStart = candidateHole; ShowFeedback("Choose wire end; Cancel wire to restart"); return;
             }
             if (!state.placement.WireBetween(wireStart,candidateHole)) { ShowFeedback("Choose an aligned end hole"); return; }
+            if (state.placement.wireLength > 9) { ShowFeedback("Wire: max 9 pitches"); return; }
             anchor = wireStart; palette.orientation = state.placement.wireOrientation; palette.wireLength = state.placement.wireLength;
         }
         string before = codec.Encode();

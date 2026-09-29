@@ -41,6 +41,41 @@ public class MNAGen : UdonSharpBehaviour
     public void UpdateMNA() {
         preprocess();
 
+        // Validate before ChangeCircuit so an incomplete diode does not replace the circuit.
+        // Diode constants: Is [A], Vt (= n*thermal voltage) [V], TT [s], Cjo [F], Vj [V], m, Fc.
+        for (int i = 0; i < preprocessedNetlist.Count; i++)
+        {
+            DataList component = (DataList)preprocessedNetlist[i];
+            string name = (string)component[0];
+            if (!name.StartsWith("D")) continue;
+            DataList parameters = (DataList)component[2];
+            if (parameters.Count != 7)
+            {
+                Debug.LogError(name + ": diode requires 7 constants: Is Vt TT Cjo Vj m Fc.");
+                return;
+            }
+            for (int parameter = 0; parameter < parameters.Count; parameter++)
+            {
+                if (parameters[parameter].TokenType != TokenType.Float)
+                {
+                    Debug.LogError(name + ": diode constants must be float DataTokens.");
+                    return;
+                }
+                float value = (float)parameters[parameter];
+                if (float.IsNaN(value) || float.IsInfinity(value) || value < 0.0f)
+                {
+                    Debug.LogError(name + ": diode constants must be finite and nonnegative.");
+                    return;
+                }
+            }
+            if ((float)parameters[1] <= 0.0f || float.IsInfinity(1.0f / (float)parameters[1])
+                || (float)parameters[4] <= 0.0f || (float)parameters[6] >= 1.0f)
+            {
+                Debug.LogError(name + ": diode requires Vt > 0 (finite reciprocal), Vj > 0, and 0 <= Fc < 1.");
+                return;
+            }
+        }
+
         //Setup voltage/current vector
         vector.Clear();
         for(int i = 0; i < preprocessedNetlist.Count; i++)
@@ -114,16 +149,26 @@ public class MNAGen : UdonSharpBehaviour
             {
                 float i_s = (float)consts[0];
                 float v_t = (float)consts[1];
+                float tt = (float)consts[2];
+                float cjo = (float)consts[3];
+                float vj = (float)consts[4];
+                float m = (float)consts[5];
+                float fc = (float)consts[6];
                 int cathodeIndex = solver.label2bufferRow((string)nets[1]);
                 int anodeIndex = solver.label2bufferRow((string)nets[0]);
-                // f adds a * (exp(b * (v2 - v1)) - 1): v1 = cathode, v2 = anode.
+                // case 1: [1..2] Is, 1/Vt; [3..4] cathode/anode; [5..9] TT, Cjo, Vj, m, Fc.
                 uint[] diodeData = new uint[]
                 {
                     1u,
                     BitConverter.ToUInt32(BitConverter.GetBytes(i_s), 0),
                     BitConverter.ToUInt32(BitConverter.GetBytes(1.0f / v_t), 0),
                     cathodeIndex < 0 ? uint.MaxValue : (uint)cathodeIndex,
-                    anodeIndex < 0 ? uint.MaxValue : (uint)anodeIndex
+                    anodeIndex < 0 ? uint.MaxValue : (uint)anodeIndex,
+                    BitConverter.ToUInt32(BitConverter.GetBytes(tt), 0),
+                    BitConverter.ToUInt32(BitConverter.GetBytes(cjo), 0),
+                    BitConverter.ToUInt32(BitConverter.GetBytes(vj), 0),
+                    BitConverter.ToUInt32(BitConverter.GetBytes(m), 0),
+                    BitConverter.ToUInt32(BitConverter.GetBytes(fc), 0)
                 };
                 solver.WriteNonLinerCircuit("I_" + comp_name + "_0", diodeData);
                 solver.WriteCircuit("I_" + comp_name + "_0", "I_" + comp_name + "_0", "A", -1.0f);
