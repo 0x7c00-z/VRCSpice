@@ -14,4 +14,5 @@ git clone https://github.com/0x7c00-z/VRCSpice.git Assets
 ・Textmesh pro essentialsをimport
 
 #その他
-回路は、Breadboardをいじったタイミング or 回路を入力し、Restart Simを押したタイミングでロードされる。
+・回路は、Breadboardをいじったタイミング or 回路を入力し、Restart Simを押したタイミングでロードされる。
+
