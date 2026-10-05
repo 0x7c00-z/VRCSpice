@@ -59,6 +59,20 @@ public static class BreadboardVerification
             Check(netlist.Count == 2 && netlist[0].DataList[0].String == "V_board_main", "one built-in source, no wire element");
             Check(netlist[0].DataList[2].DataList[0].TokenType == TokenType.Float, "MNA float constants");
             Check(catalog.MnaConstants(5,0,2).Count == 0, "Q future model boundary preserves existing solver contract");
+            for (int orientation = 0; orientation < 4; orientation++)
+            {
+                int index = state.count;
+                Check(state.Add(5,75,orientation,0,0,2), "2SC1815 placement orientation " + orientation);
+                var q = adapter.BuildNetlist()[index].DataList;
+                var terminals = q[1].DataList;
+                Check(q[0].String == "Q_" + catalog.ComponentId(state.ids[index]), "Q identity preserved");
+                Check(terminals.Count == 3
+                    && terminals[0].String == connectivity.nodeNames[state.pin1[index]]
+                    && terminals[1].String == connectivity.nodeNames[state.pin2[index]]
+                    && terminals[2].String == connectivity.nodeNames[state.pin0[index]], "physical E C B maps to MNA C B E");
+                Check(codec.TryDecode(codec.Encode()) && codec.DecodedMatchesState(), "Q physical pins JSON round trip");
+                Check(state.Remove(index), "remove temporary Q");
+            }
             Check(catalog.MnaConstants(4,0,0)[0].Float != catalog.MnaConstants(4,0,1)[0].Float, "diode models resolve constants");
             Check(state.Add(0,300,3,1,0,-1), "shorted rails accepted as editable data");
             netlist = adapter.BuildNetlist();

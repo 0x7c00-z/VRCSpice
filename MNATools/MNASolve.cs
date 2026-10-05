@@ -158,7 +158,8 @@ public class MNASolve : UdonSharpBehaviour
         int newmatrixsize = newlabel.Count;
         int width = Mathf.NextPowerOfTwo(Mathf.Max(newmatrixsize + 1, 12));
         int height = Mathf.NextPowerOfTwo(5 + newmatrixsize + buflen);
-        int mattexsize = Mathf.NextPowerOfTwo(newmatrixsize);
+        // Keep valid texture dimensions even when preprocessing removes every component.
+        int mattexsize = Mathf.NextPowerOfTwo(Mathf.Max(newmatrixsize, 1));
 
         buffer0 = CreateSolverBuffer(width, height);
         buffer1 = CreateSolverBuffer(width, height);
@@ -254,7 +255,8 @@ public class MNASolve : UdonSharpBehaviour
         {
             WriteToMaterial(outputMaterial[i]);
         }
-        initialized = true;
+        // An empty circuit has no equations for the GPU solver to advance.
+        initialized = matrixsize > 0;
     }
 
     //名前からRFloatのテクスチャの該当箇所に書き込むための関数。

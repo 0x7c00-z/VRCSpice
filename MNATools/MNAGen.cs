@@ -31,10 +31,61 @@ public class MNAGen : UdonSharpBehaviour
 
     private void preprocess()
     {
-        preprocessedNetlist.Clear();
-        for(int i = 0; i < netlist.Count; i++)
+        // Topological connectivity: all declared terminals of a component are connected.
+        // Capacitors and inductors count as connections too; this is not a DC-path check.
+        DataDictionary componentsByNode = new DataDictionary();
+        for (int i = 0; i < netlist.Count; i++)
         {
-            preprocessedNetlist.Add(netlist[i]);
+            DataList component = (DataList)netlist[i];
+            DataList nets = (DataList)component[1];
+            for (int j = 0; j < nets.Count; j++)
+            {
+                string node = (string)nets[j];
+                if (node.ToUpper() == "GND") node = "GND";
+                DataToken entry;
+                if (!componentsByNode.TryGetValue(node, out entry))
+                {
+                    entry = new DataList();
+                    componentsByNode.Add(node, entry);
+                }
+                ((DataList)entry).Add(i);
+            }
+        }
+
+        DataList pendingNodes = new DataList();
+        DataDictionary reachedNodes = new DataDictionary();
+        bool[] keepComponent = new bool[netlist.Count];
+        pendingNodes.Add("GND");
+        reachedNodes.Add("GND", true);
+        for (int head = 0; head < pendingNodes.Count; head++)
+        {
+            DataToken entry;
+            if (!componentsByNode.TryGetValue(pendingNodes[head], out entry)) continue;
+            DataList neighbours = (DataList)entry;
+            for (int i = 0; i < neighbours.Count; i++)
+            {
+                int componentIndex = (int)neighbours[i];
+                if (keepComponent[componentIndex]) continue;
+                keepComponent[componentIndex] = true;
+                DataList component = (DataList)netlist[componentIndex];
+                DataList nets = (DataList)component[1];
+                for (int j = 0; j < nets.Count; j++)
+                {
+                    string node = (string)nets[j];
+                    if (node.ToUpper() == "GND") node = "GND";
+                    if (reachedNodes.ContainsKey(node)) continue;
+                    reachedNodes.Add(node, true);
+                    pendingNodes.Add(node);
+                }
+            }
+        }
+
+        // Preserve input order and leave the original netlist intact for reconnection.
+        // Remove entire floating components so their branch-current unknowns go too.
+        preprocessedNetlist = new DataList();
+        for (int i = 0; i < netlist.Count; i++)
+        {
+            if (keepComponent[i]) preprocessedNetlist.Add(netlist[i]);
         }
     }
 

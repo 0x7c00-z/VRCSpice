@@ -60,7 +60,7 @@ public class BreadboardSimplePart : BreadboardPart
         labelTransform.localPosition = (start + end) * 0.5f + Vector3.up * 0.027f;
         labelTransform.localRotation = Quaternion.Euler(90f, -orientation * 90f, 0f);
         string title = catalog.kinds[kind] + (preview ? "" : id.ToString());
-        string pins = kind == 4 ? "\nA  >  K" : (kind == 5 ? "\nC  B  E" : "");
+        string pins = kind == 4 ? "\nA  >  K" : (kind == 5 ? "\nE  C  B" : "");
         label.text = title + "\n" + catalog.ParameterLabel(kind, value, model, length) + pins;
         label.color = preview ? (valid ? new Color(0.5f, 1f, 0.65f, 0.8f) : new Color(1f, 0.4f, 0.3f, 0.8f)) : Color.white;
     }
