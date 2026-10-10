@@ -33,13 +33,19 @@
 
 | フィールド | 型・意味 |
 | --- | --- |
-| `schemaVersion` | 整数。書出しは2。旧版1はボード定義の初期電圧で読み込める。他の未対応版は拒否する。 |
+| `schemaVersion` | 整数。書出しは4。旧版1〜3は既定のRadau IIA 5次・`maxDeltaTime=0.01`・Newton上限32を補って読み込める。他の未対応版は拒否する。 |
 | `boardId` | シーンに置いたボードの固定ID。別のボードの状態を適用しない。 |
 | `layoutId`, `layoutVersion` | 穴・内部導通・固定電源・GND割当の定義。 |
 | `catalogId`, `catalogVersion` | フットプリント・モデル参照の定義。 |
 | `revision` | 非負整数。同じボードの変更順。正常な所有者交代でも引き継ぐ。 |
+| `circuitRevision` | schema 3で必須。回路・電源の変更だけで進む非負整数。Solver設定だけの変更では進めず、MNA行列再生成の判定に使う。 |
 | `nextComponentSerial` | 次に発行する部品IDの通し番号。削除済みIDを同じボードのセッション内で再利用しない。 |
 | `supplyVoltage` | schema 2で必須。備え付け電源の現在電圧[V]。有限数で絶対値1e12以内。変更はrevisionを進める。 |
+| `integrationScheme` | schema 3で必須。`0=Radau IIA 5`、`1=Backward Euler`。 |
+| `maxDeltaTime` | schema 3で必須。有限かつ正の出力時間間隔。内部刻みとは分離し、オシロ履歴の隣接点間隔になる。 |
+| `maxNewtonIterations` | schema 4で必須。Newton法の反復回数上限。1〜256。変更しても完成済み波形履歴は維持する。 |
+| `solverSettingsRevision` | schema 3で必須。方式、`maxDeltaTime`またはNewton上限の変更で進む正整数。 |
+| `solverHistoryRevision` | schema 3で必須。`maxDeltaTime`変更時だけ進む正整数。受信側Solverの出力履歴消去を指示する。 |
 | `components` | 部品レコードの配列。書出し順は部品IDの固定順。 |
 
 | 部品フィールド | 型・意味 |
@@ -69,15 +75,21 @@
 
 ```json
 {
-  "schemaVersion": 2,
+  "schemaVersion": 4,
   "boardId": "board-01",
   "layoutId": "example-2x4",
   "layoutVersion": 1,
   "catalogId": "example-basic",
   "catalogVersion": 1,
   "revision": 3,
+  "circuitRevision": 3,
   "nextComponentSerial": 4,
   "supplyVoltage": 5.0,
+  "integrationScheme": 0,
+  "maxDeltaTime": 0.00001,
+  "maxNewtonIterations": 32,
+  "solverSettingsRevision": 1,
+  "solverHistoryRevision": 1,
   "components": [
     {
       "id": "c000001", "kind": "R", "footprintId": "resistor-1p",

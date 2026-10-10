@@ -12,7 +12,11 @@ public class BreadboardCodec : UdonSharpBehaviour
     public BreadboardCatalog catalog;
     public BreadboardPlacement placement;
     [HideInInspector] public string error = "";
-    [HideInInspector] public int decodedRevision, decodedNextSerial, decodedCount;
+    [HideInInspector] public int decodedRevision, decodedCircuitRevision, decodedNextSerial, decodedCount;
+    [HideInInspector] public int decodedIntegrationScheme, decodedMaxNewtonIterations;
+    [HideInInspector] public int decodedSolverSettingsRevision, decodedSolverHistoryRevision;
+    [HideInInspector] public int decodedSolverRestartRevision;
+    private float decodedMaxDeltaTime;
     private float decodedSupplyVoltage;
     private int[] ids, kinds, a, b, c, orientations, lengths, models;
     private float[] values;
@@ -22,11 +26,16 @@ public class BreadboardCodec : UdonSharpBehaviour
     {
         state.Initialize();
         DataDictionary root = new DataDictionary();
-        root.Add("schemaVersion", 2); root.Add("boardId", boardId);
+        root.Add("schemaVersion", 5); root.Add("boardId", boardId);
         root.Add("layoutId", layout.layoutId); root.Add("layoutVersion", layout.layoutVersion);
         root.Add("catalogId", catalog.catalogId); root.Add("catalogVersion", catalog.catalogVersion);
-        root.Add("revision", state.revision); root.Add("nextComponentSerial", state.nextSerial);
-        root.Add("supplyVoltage", state.supplyVoltage);
+        root.Add("revision", state.revision); root.Add("circuitRevision", state.circuitRevision);
+        root.Add("nextComponentSerial", state.nextSerial); root.Add("supplyVoltage", state.supplyVoltage);
+        root.Add("integrationScheme", state.integrationScheme); root.Add("maxDeltaTime", state.maxDeltaTime);
+        root.Add("maxNewtonIterations", state.maxNewtonIterations);
+        root.Add("solverSettingsRevision", state.solverSettingsRevision);
+        root.Add("solverHistoryRevision", state.solverHistoryRevision);
+        root.Add("solverRestartRevision", state.solverRestartRevision);
         DataList records = new DataList();
         for (int i = 0; i < state.count; i++)
         {
@@ -77,12 +86,12 @@ public class BreadboardCodec : UdonSharpBehaviour
         if (!VRCJson.TryDeserializeFromJson(json, out token) || token.TokenType != TokenType.DataDictionary) return false;
         DataDictionary root = token.DataDictionary;
         int schema = ReadInt(root, "schemaVersion");
-        if ((schema != 1 && schema != 2) || ReadString(root, "boardId") != boardId ||
+        if ((schema != 1 && schema != 2 && schema != 3 && schema != 4 && schema != 5) || ReadString(root, "boardId") != boardId ||
             ReadString(root, "layoutId") != layout.layoutId || ReadInt(root, "layoutVersion") != layout.layoutVersion ||
             ReadString(root, "catalogId") != catalog.catalogId || ReadInt(root, "catalogVersion") != catalog.catalogVersion)
         { error = "Board or catalog version mismatch"; return false; }
         decodedSupplyVoltage = layout.supplyVoltage;
-        if (schema == 2)
+        if (schema >= 2)
         {
             if (!root.TryGetValue("supplyVoltage", TokenType.Double, out token)) return false;
             double voltage = token.Double;
@@ -90,6 +99,32 @@ public class BreadboardCodec : UdonSharpBehaviour
             decodedSupplyVoltage = (float)voltage;
         }
         decodedRevision = ReadInt(root, "revision"); decodedNextSerial = ReadInt(root, "nextComponentSerial");
+        decodedCircuitRevision = schema >= 3 ? ReadInt(root, "circuitRevision") : decodedRevision;
+        decodedIntegrationScheme = 0; decodedMaxDeltaTime = 0.01f; decodedMaxNewtonIterations = 32;
+        decodedSolverSettingsRevision = 1; decodedSolverHistoryRevision = 1;
+        decodedSolverRestartRevision = 1;
+        if (schema >= 3)
+        {
+            decodedIntegrationScheme = ReadInt(root, "integrationScheme");
+            decodedSolverSettingsRevision = ReadInt(root, "solverSettingsRevision");
+            decodedSolverHistoryRevision = ReadInt(root, "solverHistoryRevision");
+            if (!root.TryGetValue("maxDeltaTime", TokenType.Double, out token)) return false;
+            double outputDt = token.Double; decodedMaxDeltaTime = (float)outputDt;
+            if (decodedIntegrationScheme < 0 || decodedIntegrationScheme > 1 || decodedCircuitRevision < 0 ||
+                decodedCircuitRevision > decodedRevision || decodedSolverSettingsRevision < 1 ||
+                decodedSolverHistoryRevision < 1 || double.IsNaN(outputDt) || double.IsInfinity(outputDt) ||
+                outputDt <= 0.0 || outputDt > float.MaxValue) return false;
+            if (schema >= 4)
+            {
+                decodedMaxNewtonIterations = ReadInt(root, "maxNewtonIterations");
+                if (decodedMaxNewtonIterations < 1 || decodedMaxNewtonIterations > 256) return false;
+            }
+            if (schema >= 5)
+            {
+                decodedSolverRestartRevision = ReadInt(root, "solverRestartRevision");
+                if (decodedSolverRestartRevision < 1) return false;
+            }
+        }
         if (decodedRevision < 0 || decodedNextSerial < 1) return false;
         if (!root.TryGetValue("components", TokenType.DataList, out token)) return false;
         DataList records = token.DataList;
@@ -168,14 +203,25 @@ public class BreadboardCodec : UdonSharpBehaviour
             state.pin1[dst] = b[src]; state.pin2[dst] = c[src]; state.orientations[dst] = orientations[src];
             state.lengths[dst] = lengths[src]; state.models[dst] = models[src]; state.values[dst] = values[src];
         }
-        state.count = decodedCount; state.revision = decodedRevision; state.nextSerial = decodedNextSerial;
-        state.supplyVoltage = decodedSupplyVoltage;
+        state.count = decodedCount; state.revision = decodedRevision; state.circuitRevision = decodedCircuitRevision;
+        state.nextSerial = decodedNextSerial; state.supplyVoltage = decodedSupplyVoltage;
+        state.integrationScheme = decodedIntegrationScheme; state.maxDeltaTime = decodedMaxDeltaTime;
+        state.maxNewtonIterations = decodedMaxNewtonIterations;
+        state.solverSettingsRevision = decodedSolverSettingsRevision;
+        state.solverHistoryRevision = decodedSolverHistoryRevision;
+        state.solverRestartRevision = decodedSolverRestartRevision;
         state.RebuildOccupancy(); decoded = false;
     }
 
     public bool DecodedMatchesState()
     {
-        if (!decoded || decodedCount != state.count || decodedRevision != state.revision || decodedNextSerial != state.nextSerial || decodedSupplyVoltage != state.supplyVoltage) return false;
+        if (!decoded || decodedCount != state.count || decodedRevision != state.revision ||
+            decodedCircuitRevision != state.circuitRevision || decodedNextSerial != state.nextSerial ||
+            decodedSupplyVoltage != state.supplyVoltage || decodedIntegrationScheme != state.integrationScheme ||
+            decodedMaxDeltaTime != state.maxDeltaTime || decodedMaxNewtonIterations != state.maxNewtonIterations ||
+            decodedSolverSettingsRevision != state.solverSettingsRevision ||
+            decodedSolverHistoryRevision != state.solverHistoryRevision ||
+            decodedSolverRestartRevision != state.solverRestartRevision) return false;
         for (int i = 0; i < decodedCount; i++)
         {
             int j = state.FindId(ids[i]);

@@ -12,7 +12,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: c333ccfdd0cbdbc4ca30cef2dd6e6b9b, type: 3}
   m_Name: BreadboardLedPart
   m_EditorClassIdentifier: 
-  serializedUdonProgramAsset: {fileID: 11400000, guid: 1d1c830cc8f84254b90cafdd8d620fd3,
+  serializedUdonProgramAsset: {fileID: 11400000, guid: 412ab5349ff63074781c8a4d71370eb5,
     type: 2}
   udonAssembly: 
   assemblyError: 

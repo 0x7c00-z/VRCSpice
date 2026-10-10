@@ -30,6 +30,12 @@ public static class BreadboardVerification
             var connectivity = go.AddUdonSharpComponent<BreadboardConnectivity>(); connectivity.state = state; connectivity.layout = layout;
             var adapter = go.AddUdonSharpComponent<BreadboardMnaAdapter>(); adapter.state = state; adapter.layout = layout; adapter.catalog = catalog; adapter.connectivity = connectivity;
             state.Initialize();
+            Check(state.integrationScheme == 0 && state.maxDeltaTime == 0.00001f && state.maxNewtonIterations == 32,
+                "Radau, 10 us and 32 Newton iteration defaults");
+            Check(catalog.DefaultValue(1) == 10f && catalog.DefaultValue(2) == 15e-6f &&
+                catalog.DefaultValue(3) == 1f, "RLC quick-test defaults");
+            Check(state.solverSettingsRevision == 1 && state.solverHistoryRevision == 1 &&
+                state.solverRestartRevision == 1, "solver revision defaults");
             Check(layout.holeIds.Length == 400, "400 modeled holes");
             var holes = new System.Collections.Generic.HashSet<string>(layout.holeIds);
             Check(holes.Count == 400, "unique hole IDs");
@@ -52,7 +58,7 @@ public static class BreadboardVerification
             Check(!codec.TryDecode(json.Substring(0,json.Length/2)) && state.revision == revision && state.count == 2, "truncated JSON rollback");
             Check(!codec.TryDecode(json.Replace("A:1", "missing-hole")), "unknown hole");
             Check(!codec.TryDecode(json.Replace("\"kind\":\"R\"", "\"kind\":\"V\"")), "no placeable voltage source");
-            Check(!codec.TryDecode(json.Replace("\"schemaVersion\":2", "\"schemaVersion\":99")), "schema mismatch");
+            Check(!codec.TryDecode(json.Replace("\"schemaVersion\":5", "\"schemaVersion\":99")), "schema mismatch");
             Check(codec.TryDecode(json), "valid data after invalid candidate"); codec.ApplyDecoded();
             Check(codec.Encode() == json, "canonical encode after apply");
             var netlist = adapter.BuildNetlist();
@@ -92,6 +98,50 @@ public static class BreadboardVerification
             Check(codec.TryDecode(voltageJson) && codec.DecodedMatchesState(), "supply JSON round trip");
             Check(adapter.BuildNetlist()[0].DataList[2].DataList[0].Float == 9f, "edited supply reaches MNA");
             Check(!state.ChangeSupply(float.PositiveInfinity) && state.supplyVoltage == 9f, "nonfinite voltage preserves state");
+            int settingsCircuitRevision = state.circuitRevision;
+            int settingsRevision = state.solverSettingsRevision;
+            int historyRevision = state.solverHistoryRevision;
+            int documentRevision = state.revision;
+            Check(state.ChangeSolverSettings(1, state.maxDeltaTime, state.maxNewtonIterations), "scheme-only setting change");
+            Check(state.revision == documentRevision + 1 && state.circuitRevision == settingsCircuitRevision,
+                "settings change does not revise circuit");
+            Check(state.solverSettingsRevision == settingsRevision + 1 && state.solverHistoryRevision == historyRevision,
+                "scheme change preserves output history revision");
+            Check(state.ChangeSolverSettings(1, 0.02f, state.maxNewtonIterations), "output interval change");
+            Check(state.solverSettingsRevision == settingsRevision + 2 && state.solverHistoryRevision == historyRevision + 1,
+                "output interval clears history through its revision");
+            int beforeNewtonHistory = state.solverHistoryRevision;
+            Check(state.ChangeSolverSettings(1, 0.02f, 64), "Newton iteration limit change");
+            Check(state.maxNewtonIterations == 64 && state.solverHistoryRevision == beforeNewtonHistory,
+                "Newton limit preserves completed output history");
+            int restartDocumentRevision = state.revision;
+            int restartCircuitRevision = state.circuitRevision;
+            int restartSettingsRevision = state.solverSettingsRevision;
+            int restartHistoryRevision = state.solverHistoryRevision;
+            int restartRevision = state.solverRestartRevision;
+            Check(state.RestartSimulation(), "simulation restart is accepted");
+            Check(state.revision == restartDocumentRevision + 1 &&
+                state.solverRestartRevision == restartRevision + 1, "restart has its own revision");
+            Check(state.circuitRevision == restartCircuitRevision &&
+                state.solverSettingsRevision == restartSettingsRevision &&
+                state.solverHistoryRevision == restartHistoryRevision,
+                "restart preserves circuit and solver settings revisions");
+            string settingsJson = codec.Encode();
+            Check(codec.TryDecode(settingsJson) && codec.DecodedMatchesState(), "schema 5 solver restart round trip");
+            DataToken schema4; VRCJson.TryDeserializeFromJson(settingsJson,out schema4);
+            schema4.DataDictionary["schemaVersion"] = 4; schema4.DataDictionary.Remove("solverRestartRevision");
+            DataToken schema4Encoded; VRCJson.TrySerializeToJson(schema4,JsonExportType.Minify,out schema4Encoded);
+            Check(codec.TryDecode(schema4Encoded.String), "schema 4 settings remain readable"); codec.ApplyDecoded();
+            Check(state.solverRestartRevision == 1, "schema 4 uses the initial restart revision");
+            int beforeInvalidSettings = state.revision;
+            Check(!state.ChangeSolverSettings(2, 0.02f, 64) && !state.ChangeSolverSettings(1, float.NaN, 64) &&
+                !state.ChangeSolverSettings(1, 0.02f, 0) && !state.ChangeSolverSettings(1, 0.02f, 257) &&
+                state.revision == beforeInvalidSettings, "invalid solver settings preserve state");
+            DataToken schema3; VRCJson.TryDeserializeFromJson(settingsJson,out schema3);
+            schema3.DataDictionary["schemaVersion"] = 3; schema3.DataDictionary.Remove("maxNewtonIterations");
+            DataToken schema3Encoded; VRCJson.TrySerializeToJson(schema3,JsonExportType.Minify,out schema3Encoded);
+            Check(codec.TryDecode(schema3Encoded.String), "schema 3 settings remain readable"); codec.ApplyDecoded();
+            Check(state.maxNewtonIterations == 32, "schema 3 uses the legacy Newton limit");
             DataToken parsed; VRCJson.TryDeserializeFromJson(voltageJson,out parsed);
             parsed.DataDictionary.Remove("supplyVoltage");
             DataToken encoded; VRCJson.TrySerializeToJson(parsed,JsonExportType.Minify,out encoded);
@@ -100,6 +150,11 @@ public static class BreadboardVerification
             VRCJson.TrySerializeToJson(parsed,JsonExportType.Minify,out encoded);
             Check(codec.TryDecode(encoded.String), "legacy schema is readable"); codec.ApplyDecoded();
             Check(state.supplyVoltage == layout.supplyVoltage, "legacy supply uses board default");
+            Check(state.integrationScheme == 0 && state.maxDeltaTime == 0.01f && state.maxNewtonIterations == 32,
+                "legacy solver defaults");
+            Check(state.circuitRevision == state.revision && state.solverSettingsRevision == 1 &&
+                state.solverHistoryRevision == 1 && state.solverRestartRevision == 1,
+                "legacy revisions migrate deterministically");
             var probes = go.AddUdonSharpComponent<BreadboardProbes>();
             probes.layout = layout; probes.state = state; probes.connectivity = connectivity; probes.adapter = adapter;
             var input1 = new GameObject("CH1 test",typeof(RectTransform),typeof(TMPro.TMP_InputField)); input1.transform.SetParent(go.transform);

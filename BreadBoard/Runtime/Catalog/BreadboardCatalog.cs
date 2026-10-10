@@ -61,7 +61,13 @@ public class BreadboardCatalog : UdonSharpBehaviour
     public int PinCount(int kind) { return kind == 5 ? 3 : 2; }
     public int Span(int kind, int length) { return kind == 7 ? 1 : kind == 0 ? length : (kind == 2 || kind == 5 || kind == 6 ? 2 : 3); }
     public string ComponentId(int id) { return "c" + id.ToString("D6"); }
-    public float DefaultValue(int kind) { return kind == 6 ? 100000000f : kind == 2 ? 1e-7f : (kind == 3 ? 1e-3f : 1000f); }
+    public float DefaultValue(int kind)
+    {
+        if (kind == 1) return 10f;
+        if (kind == 2) return 15e-6f;
+        if (kind == 3) return 1f;
+        return kind == 6 ? 100000000f : 1000f;
+    }
 
     public float NextValue(int kind, float value, int direction)
     {

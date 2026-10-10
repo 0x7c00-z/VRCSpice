@@ -2,8 +2,9 @@ Shader "Breadboard/LED Current Emission"
 {
     Properties
     {
-        [HideInInspector] _MainTex ("Solver buffer", 2D) = "black" {}
+        [HideInInspector] _MainTex ("Solver output dump", 2D) = "black" {}
         [HideInInspector] _DATA_N ("Solver size", Integer) = 0
+        [HideInInspector] _OutputDeltaTime ("Output interval", Float) = 0.00001
         [HideInInspector] _CurrentRow ("Current row", Integer) = -1
         _BaseColor ("Base color", Color) = (0.12,0.025,0.02,1)
         [HDR] _EmissionColor ("Emission color", Color) = (1,0.025,0.005,1)
@@ -14,15 +15,13 @@ Shader "Breadboard/LED Current Emission"
         Tags { "Queue"="Geometry" "RenderType"="Opaque" }
         Pass
         {
-            Blend Off
-            ZWrite On
-            Cull Off
+            Blend Off ZWrite On Cull Off
             CGPROGRAM
             #pragma vertex vert
             #pragma fragment frag
             #pragma target 4.5
             #include "UnityCG.cginc"
-            #include "../../MNATools/Shader/Solver.hlsl"
+            #include "../../MNATools/Shader/SolverOutputDump.hlsl"
             int _CurrentRow;
             float4 _BaseColor, _EmissionColor;
             float _CurrentGain;
@@ -36,8 +35,8 @@ Shader "Breadboard/LED Current Emission"
             float4 frag(v2f i):SV_Target
             {
                 UNITY_SETUP_STEREO_EYE_INDEX_POST_VERTEX(i);
-                if(_CurrentRow<0 || (uint)_CurrentRow>=_DATA_N)return float4(_BaseColor.rgb,1);
-                // get_data(history offset, vector row): latest accepted current.
+                if(_CurrentRow<0 || (uint)_CurrentRow>=_DATA_N || OutputDumpCount()==0u)
+                    return float4(_BaseColor.rgb,1);
                 float current=get_data(0,(uint)_CurrentRow);
                 if(!isfinite(current) || current<=0)return float4(_BaseColor.rgb,1);
                 return float4(_BaseColor.rgb+_EmissionColor.rgb*current*_CurrentGain,1);

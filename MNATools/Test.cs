@@ -1,152 +1,63 @@
-﻿
-using System;
-using System.ComponentModel;
 using TMPro;
 using UdonSharp;
 using UnityEngine;
 using VRC.SDK3.Data;
-using VRC.SDKBase;
-using VRC.Udon;
-using static BestHTTP.SecureProtocol.Org.BouncyCastle.Math.EC.ECCurve;
 
+// Manual solver harness. Oscilloscope display responsibilities live in
+// OscilloscopeController.
 public class Test : UdonSharpBehaviour
 {
-    [SerializeField] TMP_InputField netlistfield;
-    [SerializeField] TMP_InputField probefield1;
-    [SerializeField] TMP_InputField probefield2;
-    [SerializeField] TMP_InputField yscalefield;
-    [SerializeField] TMP_InputField xscalefield;
-    [SerializeField] TMP_InputField stepsPerFrame;
-    [SerializeField] TMP_InputField maxError;
+    [SerializeField] private TMP_InputField netlistfield;
+    [SerializeField] private TMP_InputField stepsPerFrame;
+    [SerializeField] private TMP_InputField maxError; // Scene compatibility only.
     private MNAGen generator;
     private MNASolve solver;
-    private int oscind1 = int.MinValue; // -1: hidden, -2: GND, >=0: buffer row
-    private int oscind2 = int.MinValue;
 
-    void Start()
+    private void Start()
     {
-        solver = this.gameObject.GetComponent<MNASolve>();
-        generator = this.gameObject.GetComponent<MNAGen>();
+        solver = GetComponent<MNASolve>();
+        generator = GetComponent<MNAGen>();
     }
 
-    void Update() {
-        int next1 = probefield1.text == "GND" ? -2 : solver.label2bufferRow(probefield1.text);
-        int next2 = probefield2.text == "GND" ? -2 : solver.label2bufferRow(probefield2.text);
-        if (oscind1 != next1) { //if changed
-            oscind1 = next1;
-            this.GetComponent<Renderer>().material.SetInteger("_Row1", oscind1);
-            Debug.Log("osc ind : " + oscind1);
-        }
-        if (oscind2 != next2)
-        { //if changed
-            oscind2 = next2;
-            this.GetComponent<Renderer>().material.SetInteger("_Row2", oscind2);
-            Debug.Log("osc ind : " + oscind2);
-        }
-        float ydiv = 1;
-        float xdiv = 1;
-        float.TryParse(yscalefield.text, out ydiv);
-        float.TryParse(xscalefield.text, out xdiv);
-        solver.WriteToMaterial(this.GetComponent<Renderer>().material);
-
-        if (ydiv > 0) {
-            this.GetComponent<Renderer>().material.SetFloat("_YScale", 0.1f / ydiv);
-        }
-        if (xdiv > 0)
-        {
-            this.GetComponent<Renderer>().material.SetFloat("_XScale", 0.1f / xdiv);
-            solver.SetMaxDeltaTime(xdiv);
-        }
-
+    private void Update()
+    {
+        if (solver == null) return;
         int steps = 100;
-        float maxerror = 0.05f;
-        int.TryParse(stepsPerFrame.text, out steps);
-        float.TryParse(maxError.text, out maxerror);
-        if (steps > 0) {
-            solver.SetStepPerFrame(steps);
-            solver.SetPCError(maxerror);
-        }
+        if (stepsPerFrame != null) int.TryParse(stepsPerFrame.text, out steps);
+        if (steps > 0) solver.SetStepPerFrame(steps);
     }
 
-    public void restart() {
-        //split into lines
-        if (!netlistfield) return;
-        string[] lines = netlistfield.text.Split("\n");
+    public void restart()
+    {
+        if (netlistfield == null || generator == null) return;
+        string[] lines = netlistfield.text.Split('\n');
         DataList nextNetlist = new DataList();
-
-        for (int i = 0; i < lines.Length; i++) { // for each line
+        for (int i = 0; i < lines.Length; i++)
+        {
             if (lines[i].Length == 0) continue;
-
-            string[] elemants = lines[i].Split(" ");
-            int num_nets = 0;
-            int num_consts = 0;
-
-            switch (elemants[0].Substring(0, 1))
+            string[] elements = lines[i].Split(' ');
+            int netCount = 0, constantCount = 0;
+            string prefix = elements[0].Substring(0, 1);
+            if (prefix == "R" || prefix == "C" || prefix == "V" || prefix == "L" || prefix == "I")
+            { netCount = 2; constantCount = 1; }
+            else if (prefix == "D")
             {
-                case "R":
-                    num_nets = 2;
-                    num_consts = 1;
-                    break;
-                case "C":
-                    num_nets = 2;
-                    num_consts = 1;
-                    break;
-                case "V":
-                    num_nets = 2;
-                    num_consts = 1;
-                    break;
-                case "L":
-                    num_nets = 2;
-                    num_consts = 1;
-                    break;
-                case "D":
-                    num_nets = 2;
-                    num_consts = 7; // Is Vt TT Cjo Vj m Fc
-                    if (elemants.Length != 10)
-                    {
-                        Debug.LogError(elemants[0] + ": expected Dname anode cathode Is Vt TT Cjo Vj m Fc.");
-                        return;
-                    }
-                    break;
-                case "Q":
-                    num_nets = 3;
-                    num_consts = 0;
-                    break;
-                case "I":
-                    num_nets = 2;
-                    num_consts = 1;
-                    break;
+                netCount = 2; constantCount = 7;
+                if (elements.Length != 10) { Debug.LogError(elements[0] + ": expected Dname anode cathode Is Vt TT Cjo Vj m Fc."); return; }
             }
-
-            //add to netlist
-            if(elemants.Length >= 1 + num_consts + num_nets && num_nets != 0)
+            else if (prefix == "Q") { netCount = 3; constantCount = 0; }
+            if (elements.Length < 1 + netCount + constantCount || netCount == 0) continue;
+            DataList component = new DataList(); DataList nets = new DataList(); DataList constants = new DataList();
+            for (int n = 0; n < netCount; n++) nets.Add(elements[1 + n]);
+            for (int c = 0; c < constantCount; c++)
             {
-                DataList component = new DataList();
-                component.Clear();
-                component = new DataList();
-                component.Add(elemants[0]);
-                component.Add(new DataList());
-                component.Add(new DataList());
-                ((DataList)component[1]).Clear();
-                ((DataList)component[2]).Clear();
-                for (int j = 0; j < num_nets; j++)
-                {
-                    ((DataList)component[1]).Add(elemants[1 + j]);
-                }
-                for (int j = 0; j < num_consts; j++)
-                {
-                    float value;
-                    if (!float.TryParse(elemants[1 + num_nets + j], out value))
-                    {
-                        Debug.LogError(elemants[0] + ": invalid numeric constant.");
-                        return;
-                    }
-                    ((DataList)component[2]).Add(value);
-                }
-                nextNetlist.Add(component);
+                float value;
+                if (!float.TryParse(elements[1 + netCount + c], out value))
+                { Debug.LogError(elements[0] + ": invalid numeric constant."); return; }
+                constants.Add(value);
             }
+            component.Add(elements[0]); component.Add(nets); component.Add(constants); nextNetlist.Add(component);
         }
-
         generator.netlist = nextNetlist;
         generator.UpdateMNA();
     }

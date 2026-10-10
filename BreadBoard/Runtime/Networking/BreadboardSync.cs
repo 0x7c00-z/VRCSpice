@@ -17,6 +17,7 @@ public class BreadboardSync : UdonSharpBehaviour
     [UdonSynced] public int grantedPlayerId = -1;
     [UdonSynced] public int grantedRevision;
     [UdonSynced] public int grantToken;
+    [UdonSynced] public int grantPurpose; // 0: board edit, 1: solver settings
     [UdonSynced] public string probe1Hole = "", probe2Hole = "";
     [UdonSynced] public int probeRevision;
     private string pendingProbe1 = "", pendingProbe2 = "", sendingProbe1 = "", sendingProbe2 = "";
@@ -30,9 +31,9 @@ public class BreadboardSync : UdonSharpBehaviour
     [HideInInspector] public int lastByteCount;
     private string pendingSnapshot;
     private int pendingGrant = -1, pendingGrantRevision, acceptedGrant = -1;
-    private int sendingRevision, sendingGrant, sendingToken;
-    private int pendingToken, acceptedToken = -1;
-    private int lastSentGrant = -1, lastSentToken = -1;
+    private int sendingRevision, sendingGrant, sendingToken, sendingPurpose;
+    private int pendingToken, pendingPurpose, acceptedToken = -1, acceptedPurpose;
+    private int lastSentGrant = -1, lastSentToken = -1, lastSentPurpose;
     private string sendingSnapshot;
     private float nextSendTime;
     private bool initializing;
@@ -44,6 +45,67 @@ public class BreadboardSync : UdonSharpBehaviour
     private bool[] buttonReleased;
     private float[] buttonExpiry;
 
+    public void RequestSolverSettings(int scheme, float outputDeltaTime, int newtonIterations)
+    {
+        if (!hasState || !Utilities.IsValid(Networking.LocalPlayer) || !Networking.IsNetworkSettled) return;
+        if (Networking.IsOwner(gameObject)) AcceptSolverSettings(scheme, outputDeltaTime, newtonIterations, Networking.LocalPlayer.playerId);
+        else SendCustomNetworkEvent(NetworkEventTarget.Owner, nameof(ReceiveSolverSettingsRequest), scheme, outputDeltaTime, newtonIterations);
+    }
+
+    [NetworkCallable(maxEventsPerSecond: 4)]
+    public void ReceiveSolverSettingsRequest(int scheme, float outputDeltaTime, int newtonIterations)
+    {
+        VRCPlayerApi caller = NetworkCalling.CallingPlayer;
+        if (!Utilities.IsValid(caller)) return;
+        AcceptSolverSettings(scheme, outputDeltaTime, newtonIterations, caller.playerId);
+    }
+
+    private void AcceptSolverSettings(int scheme, float outputDeltaTime, int newtonIterations, int playerId)
+    {
+        if (!Networking.IsOwner(gameObject) || !hasState || dirty || awaitingGrant) return;
+        string before = codec.Encode();
+        if (!state.ChangeSolverSettings(scheme, outputDeltaTime, newtonIterations)) return;
+        string after = codec.Encode();
+        if (string.IsNullOrEmpty(after))
+        {
+            if (codec.TryDecode(before)) codec.ApplyDecoded();
+            return;
+        }
+        pendingSnapshot = after; pendingGrant = playerId; pendingGrantRevision = state.revision;
+        pendingPurpose = 1; pendingToken++; dirty = true; nextSendTime = 0f;
+        controller.SimulationSettingsChanged();
+    }
+
+    public void RequestSimulationRestart()
+    {
+        if (!hasState || !Utilities.IsValid(Networking.LocalPlayer) || !Networking.IsNetworkSettled) return;
+        if (Networking.IsOwner(gameObject)) AcceptSimulationRestart(Networking.LocalPlayer.playerId);
+        else SendCustomNetworkEvent(NetworkEventTarget.Owner, nameof(ReceiveSimulationRestartRequest));
+    }
+
+    [NetworkCallable(maxEventsPerSecond: 4)]
+    public void ReceiveSimulationRestartRequest()
+    {
+        VRCPlayerApi caller = NetworkCalling.CallingPlayer;
+        if (!Utilities.IsValid(caller)) return;
+        AcceptSimulationRestart(caller.playerId);
+    }
+
+    private void AcceptSimulationRestart(int playerId)
+    {
+        if (!Networking.IsOwner(gameObject) || !hasState || dirty || awaitingGrant) return;
+        string before = codec.Encode();
+        if (!state.RestartSimulation()) return;
+        string after = codec.Encode();
+        if (string.IsNullOrEmpty(after))
+        {
+            if (codec.TryDecode(before)) codec.ApplyDecoded();
+            return;
+        }
+        pendingSnapshot = after; pendingGrant = playerId; pendingGrantRevision = state.revision;
+        pendingPurpose = 1; pendingToken++; dirty = true; nextSendTime = 0f;
+        controller.SimulationRestarted();
+    }
     // Requests travel through this scene behaviour, never through dynamically created network objects.
     public void RequestButton(int id, bool held, int gesture)
     {
@@ -102,7 +164,7 @@ public class BreadboardSync : UdonSharpBehaviour
         string after=codec.Encode();
         if(string.IsNullOrEmpty(after)) {if(codec.TryDecode(before))codec.ApplyDecoded();return;}
         pendingSnapshot=after;pendingGrant=Networking.LocalPlayer.playerId;pendingGrantRevision=state.revision;
-        pendingToken++;dirty=true;nextSendTime=0;
+        pendingPurpose=0;pendingToken++;dirty=true;nextSendTime=0;
         controller.CircuitChanged();
     }
     private void ExpireButtons()
@@ -133,7 +195,7 @@ public class BreadboardSync : UdonSharpBehaviour
             if (hasState)
             {
                 pendingSnapshot = codec.Encode(); pendingGrant = Networking.LocalPlayer.playerId;
-                pendingGrantRevision = state.revision; pendingToken = grantToken + 1; dirty = true;
+                pendingGrantRevision = state.revision; pendingPurpose = 0; pendingToken = grantToken + 1; dirty = true;
             }
             initializing = false;
         }
@@ -159,7 +221,7 @@ public class BreadboardSync : UdonSharpBehaviour
     {
         if (!CanEdit() || string.IsNullOrEmpty(json)) return false;
         pendingSnapshot = json; pendingGrant = Networking.LocalPlayer.playerId;
-        pendingGrantRevision = state.revision; dirty = true; syncError = "";
+        pendingGrantRevision = state.revision; pendingPurpose = 0; dirty = true; syncError = "";
         return true;
     }
 
@@ -174,7 +236,7 @@ public class BreadboardSync : UdonSharpBehaviour
         appliedProbeRevision = pendingProbeRevision;
         controller.probes.ApplyShared(pendingProbe1, pendingProbe2);
         // The handoff token covers observations as well as the circuit snapshot.
-        pendingToken++;
+        pendingPurpose = 0; pendingToken++;
         dirty = true;
         if (controller.palette != null) controller.palette.Refresh();
         return true;
@@ -212,7 +274,7 @@ public class BreadboardSync : UdonSharpBehaviour
             lastSentToken == pendingToken) return;
         pendingSnapshot = codec.Encode();
         if (string.IsNullOrEmpty(pendingSnapshot)) return;
-        pendingGrant = holder.playerId; pendingGrantRevision = state.revision;
+        pendingGrant = holder.playerId; pendingGrantRevision = state.revision; pendingPurpose = 0;
         pendingToken = grantToken + 1;
         dirty = true; nextSendTime = 0f;
     }
@@ -222,24 +284,31 @@ public class BreadboardSync : UdonSharpBehaviour
     {
         return hasState && !dirty && playerId == pendingGrant && playerId == lastSentGrant &&
             revision == state.revision && revision == pendingGrantRevision && revision == lastSentRevision &&
-            token == pendingToken && token == lastSentToken;
+            token == pendingToken && token == lastSentToken && pendingPurpose == lastSentPurpose;
     }
 
     [NetworkCallable]
     public void AcknowledgeGrant(int revision, int token)
     {
         VRCPlayerApi caller = NetworkCalling.CallingPlayer;
-        if (!Networking.IsOwner(gameObject) || !Utilities.IsValid(caller) || caller.isLocal ||
+        if (!Networking.IsOwner(gameObject) || !Utilities.IsValid(caller) || caller.isLocal || pendingPurpose != 0 ||
             !Networking.IsOwner(caller, pickup.gameObject)) return;
+        if (MatchesAcknowledgement(caller.playerId, revision, token)) Networking.SetOwner(caller, gameObject);
+    }
+
+    [NetworkCallable]
+    public void AcknowledgeSettingsGrant(int revision, int token)
+    {
+        VRCPlayerApi caller = NetworkCalling.CallingPlayer;
+        if (!Networking.IsOwner(gameObject) || !Utilities.IsValid(caller) || caller.isLocal || pendingPurpose != 1) return;
         if (MatchesAcknowledgement(caller.playerId, revision, token)) Networking.SetOwner(caller, gameObject);
     }
 
     public override bool OnOwnershipRequest(VRCPlayerApi requester, VRCPlayerApi newOwner)
     {
-        if (!Utilities.IsValid(requester) || !Utilities.IsValid(newOwner) ||
-            !Networking.IsOwner(requester, gameObject) || !Networking.IsOwner(newOwner, pickup.gameObject)) return false;
-        if (Networking.IsOwner(gameObject))
-            return MatchesAcknowledgement(newOwner.playerId, grantedRevision, grantToken);
+        if (!Utilities.IsValid(requester) || !Utilities.IsValid(newOwner) || !Networking.IsOwner(requester, gameObject)) return false;
+        if (grantPurpose != 1 && !Networking.IsOwner(newOwner, pickup.gameObject)) return false;
+        if (Networking.IsOwner(gameObject)) return MatchesAcknowledgement(newOwner.playerId, grantedRevision, grantToken);
         return hasState && acceptedGrant == newOwner.playerId && acceptedToken == grantToken &&
             state.revision == grantedRevision;
     }
@@ -249,8 +318,8 @@ public class BreadboardSync : UdonSharpBehaviour
         if (!hasState || string.IsNullOrEmpty(pendingSnapshot)) return;
         probe1Hole = pendingProbe1; probe2Hole = pendingProbe2; probeRevision = pendingProbeRevision;
         sendingProbe1 = probe1Hole; sendingProbe2 = probe2Hole; sendingProbeRevision = probeRevision;
-        snapshot = pendingSnapshot; grantedPlayerId = pendingGrant; grantedRevision = pendingGrantRevision; grantToken = pendingToken;
-        sendingSnapshot = snapshot; sendingRevision = grantedRevision; sendingGrant = grantedPlayerId; sendingToken = grantToken;
+        snapshot = pendingSnapshot; grantedPlayerId = pendingGrant; grantedRevision = pendingGrantRevision; grantToken = pendingToken; grantPurpose = pendingPurpose;
+        sendingSnapshot = snapshot; sendingRevision = grantedRevision; sendingGrant = grantedPlayerId; sendingToken = grantToken; sendingPurpose = grantPurpose;
     }
 
     public override void OnPostSerialization(SerializationResult result)
@@ -261,16 +330,17 @@ public class BreadboardSync : UdonSharpBehaviour
         {
             syncError = "Send failed - retrying"; dirty = true; nextSendTime = Time.time + 2f; return;
         }
-        lastSentRevision = sendingRevision; lastSentGrant = sendingGrant; lastSentToken = sendingToken;
+        lastSentRevision = sendingRevision; lastSentGrant = sendingGrant; lastSentToken = sendingToken; lastSentPurpose = sendingPurpose;
         sharedSnapshot = sendingSnapshot;
         sharedProbe1 = sendingProbe1; sharedProbe2 = sendingProbe2; sharedProbeRevision = sendingProbeRevision;
         // Completion of an older send must not clear a newer edit.
-        dirty = sendingSnapshot != pendingSnapshot || sendingGrant != pendingGrant || sendingToken != pendingToken || sendingProbeRevision != pendingProbeRevision;
+        dirty = sendingSnapshot != pendingSnapshot || sendingGrant != pendingGrant || sendingToken != pendingToken ||
+            sendingPurpose != pendingPurpose || sendingProbeRevision != pendingProbeRevision;
         syncError = "";
         VRCPlayerApi local = Networking.LocalPlayer;
         if (Utilities.IsValid(local) && sendingGrant == local.playerId && !dirty)
         {
-            acceptedGrant = local.playerId; acceptedToken = sendingToken; awaitingGrant = false;
+            acceptedGrant = local.playerId; acceptedToken = sendingToken; acceptedPurpose = sendingPurpose; awaitingGrant = false;
         }
         // Sending successfully does not prove the receiver applied the snapshot.
         // Ownership is transferred only by AcknowledgeGrant after that application.
@@ -291,6 +361,10 @@ public class BreadboardSync : UdonSharpBehaviour
         if (hasState && codec.decodedRevision < state.revision) return;
         bool changed = !hasState || codec.decodedRevision > state.revision;
         if (!changed && !codec.DecodedMatchesState()) { syncError = "Conflicting circuit revision"; return; }
+        int oldCircuitRevision = state.circuitRevision;
+        int oldSettingsRevision = state.solverSettingsRevision;
+        int oldHistoryRevision = state.solverHistoryRevision;
+        int oldRestartRevision = state.solverRestartRevision;
         if (changed) codec.ApplyDecoded();
         sharedSnapshot = snapshot;
         sharedProbe1 = probe1Hole; sharedProbe2 = probe2Hole; sharedProbeRevision = probeRevision;
@@ -299,10 +373,20 @@ public class BreadboardSync : UdonSharpBehaviour
         if (controller.palette != null) controller.palette.Refresh();
         hasState = true;
         if (state.revision == grantedRevision)
-        { acceptedGrant = grantedPlayerId; acceptedToken = grantToken; }
+        { acceptedGrant = grantedPlayerId; acceptedToken = grantToken; acceptedPurpose = grantPurpose; }
         if (Utilities.IsValid(Networking.LocalPlayer) && acceptedGrant == Networking.LocalPlayer.playerId) awaitingGrant = false;
         syncError = "";
-        if (changed) controller.CircuitChanged();
+        if (changed)
+        {
+            if (oldCircuitRevision != state.circuitRevision) controller.CircuitChanged();
+            else if (oldSettingsRevision != state.solverSettingsRevision || oldHistoryRevision != state.solverHistoryRevision)
+                controller.SimulationSettingsChanged();
+            if (oldRestartRevision != state.solverRestartRevision) controller.SimulationRestarted();
+        }
+        VRCPlayerApi local = Networking.LocalPlayer;
+        if (Utilities.IsValid(local) && !Networking.IsOwner(gameObject) && acceptedGrant == local.playerId &&
+            acceptedPurpose == 1 && acceptedToken == grantToken)
+            SendCustomNetworkEvent(NetworkEventTarget.Owner, nameof(AcknowledgeSettingsGrant), grantedRevision, grantToken);
     }
 
     public override void OnOwnershipTransferred(VRCPlayerApi player)
@@ -326,10 +410,10 @@ public class BreadboardSync : UdonSharpBehaviour
             // grant from the last shared state after the network has settled.
             pendingSnapshot = hasState ? codec.Encode() : snapshot;
             pendingProbe1 = sharedProbe1; pendingProbe2 = sharedProbe2; pendingProbeRevision = sharedProbeRevision;
-            pendingGrant = grantedPlayerId; pendingGrantRevision = grantedRevision; pendingToken = grantToken;
+            pendingGrant = grantedPlayerId; pendingGrantRevision = grantedRevision; pendingToken = grantToken; pendingPurpose = grantPurpose;
             lastSentRevision = -1; lastSentGrant = -1; lastSentToken = -1;
         }
-        else { acceptedGrant = -1; acceptedToken = -1; awaitingGrant = false; }
+        else { acceptedGrant = -1; acceptedToken = -1; acceptedPurpose = 0; awaitingGrant = false; }
         controller.CancelInteraction();
     }
 

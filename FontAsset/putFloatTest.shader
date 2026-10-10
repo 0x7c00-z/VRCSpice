@@ -52,15 +52,14 @@ Shader "Unlit/putFloatTest"
                 uint state = SolverLoadUInt(uint2(0, 0));
                 //float val = SolverLoadFloat(uint2(0, 4));
 
-                float data = 0;
-                data = calc_normalized_error();
+                float data = SolverLoadFloat(OFFSET_NORMALIZED_PROGRESS);
 
                 putFloatChar(center + cursur, LINE, 0, SolverLoadUInt(OFFSET_SOLVER_STATE), 20, stream);
                 cursur.y -= LINE;
                 putFloatChar(center + cursur, LINE, 0, data, 16, stream);
                 cursur.y -= LINE;
 
-                data = SolverLoadFloat(OFFSET_TIME_STEP);
+                data = SolverLoadFloat(OFFSET_NORMALIZED_STEP);
                 putFloatChar(center + cursur, LINE, 0, data, 16, stream);
             }
             ENDCG

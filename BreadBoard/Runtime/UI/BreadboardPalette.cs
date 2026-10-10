@@ -15,7 +15,7 @@ public class BreadboardPalette : UdonSharpBehaviour
     public Material normalMaterial, selectedMaterial, hoverMaterial;
     public Vector2 buttonHalfSize = new Vector2(.023f,.013f);
     [HideInInspector] public int kind = 1, orientation, wireLength = 3, model = -1, mode;
-    [HideInInspector] public float value = 1000f;
+    [HideInInspector] public float value = 10f;
     [HideInInspector] public int selectedId;
     // 0 home, 2 flat parts list, 3 models, 4 supply controls.
     [HideInInspector] public int page, listPage;
